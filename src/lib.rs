@@ -1,8 +1,11 @@
 use std::str::CharIndices;
 
+type Predicate = fn(char) -> bool;
+
 #[derive(Debug, PartialEq)]
 pub enum Regex<'a> {
     Char(char),
+    Predicate(Predicate),
     String(&'a str),
     Repeat(Box<Regex<'a>>, usize, Option<usize>),
     And(Box<Regex<'a>>, Box<Regex<'a>>),
@@ -10,31 +13,35 @@ pub enum Regex<'a> {
     Eof
 }
 
-pub fn char(c: char) -> Regex<'static> {
-    Regex::Char(c)
+pub fn regex_char(char: char) -> Regex<'static> {
+    Regex::Char(char)
 }
 
-pub fn string(s: &str) -> Regex {
-    Regex::String(s)
+pub fn regex_predicate(predicate: Predicate) -> Regex<'static> {
+    Regex::Predicate(predicate)
 }
 
-pub fn repeat(parser: Regex, min: usize, max: Option<usize>) -> Regex {
+pub fn regex_string(string: &str) -> Regex {
+    Regex::String(string)
+}
+
+pub fn regex_repeat(regex: Regex, min: usize, max: Option<usize>) -> Regex {
     if let Some(max) = max {
         if min > max {
-            panic!("repeat: min parameters can't be greaater than max")
+            panic!("regex_repeat: min parameters can't be greater than max")
         }
     }
     
-    Regex::Repeat(Box::new(parser), min, max)
+    Regex::Repeat(Box::new(regex), min, max)
 }
 
 #[cfg(test)]
-mod repeat_should {
-    use crate::{repeat, string, Regex};
+mod regex_repeat_should {
+    use crate::{regex_repeat, regex_string, Regex};
 
     #[test]
     fn make_repeat_3_4_when_min_is_3_and_max_is_4() {
-        let actual = repeat(string("abc"), 3, Some(4));
+        let actual = regex_repeat(regex_string("abc"), 3, Some(4));
         let expected = Regex::Repeat(Box::new(Regex::String("abc")), 3, Some(4));
 
         assert_eq!(expected, actual);
@@ -44,57 +51,57 @@ mod repeat_should {
     #[test]
     #[should_panic]
     fn panic_when_min_is_4_and_max_is_3() {
-        let _ = repeat(string("abc"), 4, Some(3));
+        let _ = regex_repeat(regex_string("abc"), 4, Some(3));
     }
 }
 
-pub fn optional(parser: Regex) -> Regex {
-    repeat(parser, 0, Some(1))
+pub fn regex_optional(regex: Regex) -> Regex {
+    regex_repeat(regex, 0, Some(1))
 }
 
 #[cfg(test)]
-mod optional_should {
-    use super::{char, optional, Regex};
+mod regex_optional_should {
+    use super::{regex_char, regex_optional, Regex};
 
     #[test]
     fn make_repeat_0_1() {
-        let actual = optional(char('a'));
+        let actual = regex_optional(regex_char('a'));
         let expected = Regex::Repeat(Box::new(Regex::Char('a')), 0, Some(1));
 
         assert_eq!(expected, actual);
     }
 }
 
-pub fn repeat0(parser: Regex) -> Regex {
-    repeat(parser, 0, None)
+pub fn regex_repeat0(regex: Regex) -> Regex {
+    regex_repeat(regex, 0, None)
 }
 
-pub fn repeat1(parser: Regex) -> Regex {
-    repeat(parser, 1, None)
+pub fn regex_repeat1(regex: Regex) -> Regex {
+    regex_repeat(regex, 1, None)
 }
 
-pub fn and<'a>(parser1: Regex<'a>, parser2: Regex<'a>) -> Regex<'a> {
-    Regex::And(Box::new(parser1), Box::new(parser2))
+pub fn regex_and<'a>(regex1: Regex<'a>, regex2: Regex<'a>) -> Regex<'a> {
+    Regex::And(Box::new(regex1), Box::new(regex2))
 }
 
 #[cfg(test)]
-mod and_should {
-    use super::{and, char, Regex};
+mod regex_and_should {
+    use super::{regex_and, regex_char, Regex};
 
     #[test]
     fn make_and_char_a_char_b () {
-        let actual = and(char('a'), char('b'));
+        let actual = regex_and(regex_char('a'), regex_char('b'));
         let expected = Regex::And(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
 
         assert_eq!(expected, actual);
     }
 }
 
-pub fn or<'a>(parser1: Regex<'a>, parser2: Regex<'a>) -> Regex<'a> {
-    Regex::And(Box::new(parser1), Box::new(parser2))
+pub fn regex_or<'a>(regex1: Regex<'a>, regex2: Regex<'a>) -> Regex<'a> {
+    Regex::Or(Box::new(regex1), Box::new(regex2))
 }
 
-pub fn eof() -> Regex<'static> {
+pub fn regex_eof() -> Regex<'static> {
     Regex::Eof
 }
 
@@ -178,8 +185,8 @@ impl<'a> StringCharStream<'a> {
         let mut items = s.char_indices();
         let next = items.next().map(|(_, char)| char);
         StringCharStream {
-            items: items,
-            next: next,
+            items,
+            next,
             position: Position::new(),
             states: Vec::new()
         }
@@ -293,12 +300,14 @@ mod string_char_stream_should {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Error {
     UnexpectedEof,
     ExpectEof,
     ExpectChar
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct ParseError {
     error: Error,
     position: Position

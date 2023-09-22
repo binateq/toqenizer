@@ -1,8 +1,23 @@
-use super::{Regex, CharStream, ParseError, Error};
+use super::{Predicate, Regex, CharStream, ParseError, Error};
 
 fn parse_char(char: char, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     if let Some(next_char) = stream.peek() {
         if char == next_char {
+            buffer.push(next_char);
+            stream.next();
+
+            Ok(())
+        } else {
+            Err(ParseError{ error: Error::ExpectChar, position: stream.position() })
+        }
+    } else {
+        Err(ParseError{ error: Error::UnexpectedEof, position: stream.position() })
+    }
+}
+
+fn parse_predicate(predicate: &Predicate, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+    if let Some(next_char) = stream.peek() {
+        if predicate(next_char) {
             buffer.push(next_char);
             stream.next();
 
@@ -119,6 +134,7 @@ fn parse_eof(stream: &mut dyn CharStream) -> Result<(), ParseError> {
 fn parse_into_buffer(buffer: &mut Vec::<char>, regex: &Regex, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     match regex {
         Regex::Char(char) => parse_char(*char, buffer, stream),
+        Regex::Predicate(predicate) => parse_predicate(predicate, buffer, stream),
         Regex::String(string) => parse_string(*string, buffer, stream),
         Regex::Repeat(regex, min, max) => parse_repeat(regex.as_ref(), *min, *max, buffer, stream),
         Regex::And(regex1, regex2) => parse_and(regex1.as_ref(), regex2.as_ref(), buffer, stream),
@@ -134,5 +150,28 @@ pub fn parse(regex: &Regex, stream: &mut dyn CharStream) -> Result<String, Parse
         Err(parse_error)
     } else {
         Ok(buffer.into_iter().collect())
+    }
+}
+
+#[cfg(test)]
+mod parse_should {
+    use super::parse;
+    use super::super::{StringCharStream, regex_and, regex_char, regex_eof, regex_repeat1, regex_predicate};
+
+    #[test]
+    fn parse_abc_when_regex_is_abc_eof() {
+        let mut stream = StringCharStream::new("abc");
+        let regex = regex_and(regex_and(regex_and(regex_char('a'), regex_char('b')), regex_char('c')), regex_eof());
+
+        assert_eq!(Ok("abc".to_string()), parse(&regex, &mut stream));
+    }
+
+    #[test]
+    fn parse_digits() {
+        let mut stream = StringCharStream::new("1234567.89");
+        let digits1 = regex_repeat1(regex_predicate(|c| c.is_digit(10)));
+
+        assert_eq!(Ok("1234567".to_string()), parse(&digits1, &mut stream));
+        assert_eq!(Some('.'), stream.next);
     }
 }
