@@ -1,0 +1,138 @@
+use super::{Regex, CharStream, ParseError, Error};
+
+fn parse_char(char: char, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+    if let Some(next_char) = stream.peek() {
+        if char == next_char {
+            buffer.push(next_char);
+            stream.next();
+
+            Ok(())
+        } else {
+            Err(ParseError{ error: Error::ExpectChar, position: stream.position() })
+        }
+    } else {
+        Err(ParseError{ error: Error::UnexpectedEof, position: stream.position() })
+    }
+}
+
+fn parse_string(string: &str, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+    let buffer_length = buffer.len();
+    stream.store_state();
+
+    for char in string.chars() {
+        if let Some(next_char) = stream.peek() {
+            if char == next_char {
+                buffer.push(next_char);
+                stream.next();
+            } else {
+                buffer.truncate(buffer_length);
+                stream.restore_state();
+                
+                return Err(ParseError{ error: Error::ExpectChar, position: stream.position() });
+            }
+        } else {
+            buffer.truncate(buffer_length);
+            stream.restore_state();
+            
+            return Err(ParseError{ error: Error::UnexpectedEof, position: stream.position() });
+        }
+    }
+
+    stream.discard_state();
+    Ok(())
+}
+
+fn parse_repeat(regex: &Regex, min: usize, max: Option<usize>, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+    let buffer_length = buffer.len();
+    stream.store_state();
+
+    for _ in 0..min {
+        if let Err(parse_error) = parse_into_buffer(buffer, &regex, stream) {
+            buffer.truncate(buffer_length);
+            stream.restore_state();
+
+            return Err(parse_error);
+        }
+    }
+
+    if let Some(max) = max {
+        for _ in (max - min)..max {
+            if let Err(parse_error) = parse_into_buffer(buffer, &regex, stream) {
+                buffer.truncate(buffer_length);
+                stream.restore_state();
+                
+                return Err(parse_error);
+            }
+        }
+        } else {
+        while let Ok(()) = parse_into_buffer(buffer, &regex, stream) { }
+    }
+
+    stream.discard_state();
+    Ok(())
+}
+
+fn parse_and(regex1: &Regex, regex2: &Regex, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+    let buffer_length = buffer.len();
+    stream.store_state();
+
+    if let Err(parse_error) = parse_into_buffer(buffer, regex1, stream) {
+        return Err(parse_error);
+    }
+
+    if let Err(parse_error) = parse_into_buffer(buffer, regex2, stream) {
+        buffer.truncate(buffer_length);
+        stream.restore_state();
+
+        Err(parse_error)
+    } else {
+        stream.discard_state();
+        Ok(())
+    }
+}
+
+fn parse_or(regex1: &Regex, regex2: &Regex, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+    let buffer_length = buffer.len();
+    stream.store_state();
+
+    if let Err(_) = parse_into_buffer(buffer, regex1, stream) {
+        if let Err(parse_error) = parse_into_buffer(buffer, regex2, stream) {
+            buffer.truncate(buffer_length);
+            stream.restore_state();
+    
+            return Err(parse_error);
+        }
+    }
+
+    stream.discard_state();
+    Ok(())
+}
+
+fn parse_eof(stream: &mut dyn CharStream) -> Result<(), ParseError> {
+    if stream.peek().is_none() {
+        Ok(())
+    } else {
+        Err(ParseError{ error: Error::ExpectEof, position: stream.position() })
+    }
+}
+
+fn parse_into_buffer(buffer: &mut Vec::<char>, regex: &Regex, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+    match regex {
+        Regex::Char(char) => parse_char(*char, buffer, stream),
+        Regex::String(string) => parse_string(*string, buffer, stream),
+        Regex::Repeat(regex, min, max) => parse_repeat(regex.as_ref(), *min, *max, buffer, stream),
+        Regex::And(regex1, regex2) => parse_and(regex1.as_ref(), regex2.as_ref(), buffer, stream),
+        Regex::Or(regex1, regex2) => parse_or(regex1.as_ref(), regex2.as_ref(), buffer, stream),
+        Regex::Eof => parse_eof(stream)
+    }
+}
+
+pub fn parse(regex: &Regex, stream: &mut dyn CharStream) -> Result<String, ParseError> {
+    let mut buffer = Vec::new();
+    
+    if let Err(parse_error) = parse_into_buffer(&mut buffer, regex, stream) {
+        Err(parse_error)
+    } else {
+        Ok(buffer.into_iter().collect())
+    }
+}
