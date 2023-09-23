@@ -1,3 +1,4 @@
+use std::ops;
 use std::str::CharIndices;
 
 type Predicate = fn(char) -> bool;
@@ -13,35 +14,49 @@ pub enum Regex<'a> {
     Eof
 }
 
-pub fn regex_char(char: char) -> Regex<'static> {
+pub fn c(char: char) -> Regex<'static> {
     Regex::Char(char)
 }
 
-pub fn regex_predicate(predicate: Predicate) -> Regex<'static> {
+pub fn p(predicate: Predicate) -> Regex<'static> {
     Regex::Predicate(predicate)
 }
 
-pub fn regex_string(string: &str) -> Regex {
+pub fn s(string: &str) -> Regex {
     Regex::String(string)
 }
 
-pub fn regex_repeat(regex: Regex, min: usize, max: Option<usize>) -> Regex {
-    if let Some(max) = max {
-        if min > max {
-            panic!("regex_repeat: min parameters can't be greater than max")
+impl<'a> Regex<'a> {
+    pub fn rep(self, min: usize, max: Option<usize>) -> Self {
+        if let Some(max) = max {
+            if min > max {
+                panic!("regex_repeat: min parameters can't be greater than max")
+            }
         }
+        
+        Regex::Repeat(Box::new(self), min, max)
     }
-    
-    Regex::Repeat(Box::new(regex), min, max)
+
+    pub fn rep0(self) -> Self {
+        self.rep(0, None)
+    }
+
+    pub fn rep1(self) -> Self {
+        self.rep(1, None)
+    }
+
+    pub fn opt(self) -> Self {
+        self.rep(0, Some(1))
+    }
 }
 
 #[cfg(test)]
-mod regex_repeat_should {
-    use crate::{regex_repeat, regex_string, Regex};
+mod regex_should {
+    use super::{c, s, Regex};
 
     #[test]
-    fn make_repeat_3_4_when_min_is_3_and_max_is_4() {
-        let actual = regex_repeat(regex_string("abc"), 3, Some(4));
+    fn make_repeat_3_4_when_rep_min_is_3_and_max_is_4() {
+        let actual = s("abc").rep(3, Some(4));
         let expected = Regex::Repeat(Box::new(Regex::String("abc")), 3, Some(4));
 
         assert_eq!(expected, actual);
@@ -50,60 +65,50 @@ mod regex_repeat_should {
     
     #[test]
     #[should_panic]
-    fn panic_when_min_is_4_and_max_is_3() {
-        let _ = regex_repeat(regex_string("abc"), 4, Some(3));
+    fn panic_when_rep_min_is_4_and_max_is_3() {
+        let _ = s("abc").rep(4, Some(3));
     }
-}
-
-pub fn regex_optional(regex: Regex) -> Regex {
-    regex_repeat(regex, 0, Some(1))
-}
-
-#[cfg(test)]
-mod regex_optional_should {
-    use super::{regex_char, regex_optional, Regex};
 
     #[test]
-    fn make_repeat_0_1() {
-        let actual = regex_optional(regex_char('a'));
+    fn make_repeat_0_1_when_opt() {
+        let actual = c('a').opt();
         let expected = Regex::Repeat(Box::new(Regex::Char('a')), 0, Some(1));
 
         assert_eq!(expected, actual);
     }
 }
 
-pub fn regex_repeat0(regex: Regex) -> Regex {
-    regex_repeat(regex, 0, None)
+impl<'a> ops::BitAnd<Regex<'a>> for Regex<'a> {
+    type Output = Regex<'a>;
+
+    fn bitand(self, rhs: Regex<'a>) -> Regex<'a> {
+        Regex::And(Box::new(self), Box::new(rhs))
+    }
 }
 
-pub fn regex_repeat1(regex: Regex) -> Regex {
-    regex_repeat(regex, 1, None)
-}
+impl<'a> ops::BitOr<Regex<'a>> for Regex<'a> {
+    type Output = Regex<'a>;
 
-pub fn regex_and<'a>(regex1: Regex<'a>, regex2: Regex<'a>) -> Regex<'a> {
-    Regex::And(Box::new(regex1), Box::new(regex2))
+    fn bitor(self, rhs: Regex<'a>) -> Regex<'a> {
+        Regex::And(Box::new(self), Box::new(rhs))
+    }
 }
 
 #[cfg(test)]
 mod regex_and_should {
-    use super::{regex_and, regex_char, Regex};
+    use super::{c, Regex};
 
     #[test]
     fn make_and_char_a_char_b () {
-        let actual = regex_and(regex_char('a'), regex_char('b'));
+        let actual = c('a') & c('b');
         let expected = Regex::And(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
 
         assert_eq!(expected, actual);
     }
 }
 
-pub fn regex_or<'a>(regex1: Regex<'a>, regex2: Regex<'a>) -> Regex<'a> {
-    Regex::Or(Box::new(regex1), Box::new(regex2))
-}
-
-pub fn regex_eof() -> Regex<'static> {
-    Regex::Eof
-}
+#[allow(non_upper_case_globals)]
+const eof: Regex = Regex::Eof;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Position {

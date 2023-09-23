@@ -156,12 +156,12 @@ pub fn parse(regex: &Regex, stream: &mut dyn CharStream) -> Result<String, Parse
 #[cfg(test)]
 mod parse_should {
     use super::parse;
-    use super::super::{StringCharStream, regex_and, regex_char, regex_eof, regex_repeat1, regex_predicate};
+    use super::super::{StringCharStream, c, p, eof};
 
     #[test]
     fn parse_abc_when_regex_is_abc_eof() {
         let mut stream = StringCharStream::new("abc");
-        let regex = regex_and(regex_and(regex_and(regex_char('a'), regex_char('b')), regex_char('c')), regex_eof());
+        let regex = c('a') & c('b') & c('c') & eof;
 
         assert_eq!(Ok("abc".to_string()), parse(&regex, &mut stream));
     }
@@ -169,7 +169,7 @@ mod parse_should {
     #[test]
     fn parse_digits() {
         let mut stream = StringCharStream::new("1234567.89");
-        let digits1 = regex_repeat1(regex_predicate(|c| c.is_digit(10)));
+        let digits1 = p(|c| c.is_digit(10)).rep1();
 
         assert_eq!(Ok("1234567".to_string()), parse(&digits1, &mut stream));
         assert_eq!(Some('.'), stream.next);
