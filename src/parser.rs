@@ -1,6 +1,6 @@
 use super::{Predicate, TokenBuilder, CharStream, ParseError, Error};
 
-fn parse_char(char: char, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_char(char: char, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     if let Some(next_char) = stream.peek() {
         if char == next_char {
             buffer.push(next_char);
@@ -15,7 +15,7 @@ fn parse_char(char: char, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -
     }
 }
 
-fn parse_predicate(predicate: &Predicate, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_predicate(predicate: &Predicate, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     if let Some(next_char) = stream.peek() {
         if predicate(next_char) {
             buffer.push(next_char);
@@ -30,7 +30,7 @@ fn parse_predicate(predicate: &Predicate, buffer: &mut Vec<char>, stream: &mut d
     }
 }
 
-fn parse_string(string: &str, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_string(string: &str, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     let buffer_length = buffer.len();
     stream.store_state();
 
@@ -57,7 +57,7 @@ fn parse_string(string: &str, buffer: &mut Vec<char>, stream: &mut dyn CharStrea
     Ok(())
 }
 
-fn parse_repeat(regex: &TokenBuilder, min: usize, max: Option<usize>, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_repeat(regex: &TokenBuilder, min: usize, max: Option<usize>, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     let buffer_length = buffer.len();
     stream.store_state();
 
@@ -87,7 +87,7 @@ fn parse_repeat(regex: &TokenBuilder, min: usize, max: Option<usize>, buffer: &m
     Ok(())
 }
 
-fn parse_and(regex1: &TokenBuilder, regex2: &TokenBuilder, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_and(regex1: &TokenBuilder, regex2: &TokenBuilder, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     let buffer_length = buffer.len();
     stream.store_state();
 
@@ -106,7 +106,7 @@ fn parse_and(regex1: &TokenBuilder, regex2: &TokenBuilder, buffer: &mut Vec<char
     }
 }
 
-fn parse_or(regex1: &TokenBuilder, regex2: &TokenBuilder, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_or(regex1: &TokenBuilder, regex2: &TokenBuilder, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     let buffer_length = buffer.len();
     stream.store_state();
 
@@ -131,7 +131,7 @@ fn parse_eof(stream: &mut dyn CharStream) -> Result<(), ParseError> {
     }
 }
 
-fn parse_into_buffer(buffer: &mut Vec::<char>, regex: &TokenBuilder, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_into_buffer(buffer: &mut String, regex: &TokenBuilder, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     match regex {
         TokenBuilder::Char(char) => parse_char(*char, buffer, stream),
         TokenBuilder::Predicate(predicate) => parse_predicate(predicate, buffer, stream),
@@ -144,12 +144,12 @@ fn parse_into_buffer(buffer: &mut Vec::<char>, regex: &TokenBuilder, stream: &mu
 }
 
 pub fn parse(regex: &TokenBuilder, stream: &mut dyn CharStream) -> Result<String, ParseError> {
-    let mut buffer = Vec::new();
+    let mut buffer = String::new();
     
     if let Err(parse_error) = parse_into_buffer(&mut buffer, regex, stream) {
         Err(parse_error)
     } else {
-        Ok(buffer.into_iter().collect())
+        Ok(buffer)
     }
 }
 
