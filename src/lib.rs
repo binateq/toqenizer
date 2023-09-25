@@ -327,7 +327,8 @@ mod string_char_stream_should {
 pub enum Error {
     UnexpectedEof,
     ExpectEof,
-    ExpectChar
+    ExpectChar,
+    UnrecognizedChar
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -336,7 +337,7 @@ pub struct ParseError {
     position: Position
 }
 
-pub type Mapper<Token> = fn(&str) -> Token;
+pub type Mapper<Token> = fn(String) -> Token;
 
 #[derive(Debug, PartialEq)]
 pub struct Tokenizer<'a, Token> {
@@ -398,12 +399,12 @@ mod tokenizer_should {
         Integer(u32)
     }
 
-    fn make_identifier(name: &str) -> Token {
-        Token::Identifier(name.to_string())
+    fn make_identifier(name: String) -> Token {
+        Token::Identifier(name)
     }
 
-    fn make_integer(value: &str) -> Token {
-        Token::Integer(u32::from_str_radix(value, 10).unwrap())
+    fn make_integer(value: String) -> Token {
+        Token::Integer(u32::from_str_radix(&value, 10).unwrap())
     }
 
     #[test]
@@ -411,8 +412,9 @@ mod tokenizer_should {
         let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
         let integer = p(|c| c.is_digit(10)).rep1();
 
-        let actual = identifier.clone() >> make_identifier
-                                    | integer.clone() >> make_integer;
+        let actual
+            = identifier.clone() >> make_identifier
+            | integer.clone() >> make_integer;
         let expected = Rule::Multiple(vec![
             Tokenizer {
                 builder: identifier,
