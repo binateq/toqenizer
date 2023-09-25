@@ -4,29 +4,43 @@ use std::str::CharIndices;
 type Predicate = fn(char) -> bool;
 
 #[derive(Debug, PartialEq)]
-pub enum Regex<'a> {
+pub enum TokenBuilder<'a> {
     Char(char),
     Predicate(Predicate),
     String(&'a str),
-    Repeat(Box<Regex<'a>>, usize, Option<usize>),
-    And(Box<Regex<'a>>, Box<Regex<'a>>),
-    Or(Box<Regex<'a>>, Box<Regex<'a>>),
+    Repeat(Box<TokenBuilder<'a>>, usize, Option<usize>),
+    And(Box<TokenBuilder<'a>>, Box<TokenBuilder<'a>>),
+    Or(Box<TokenBuilder<'a>>, Box<TokenBuilder<'a>>),
     Eof
 }
 
-pub fn c(char: char) -> Regex<'static> {
-    Regex::Char(char)
+pub trait Tok<'a> {
+    fn tok(self) -> TokenBuilder<'a>;
 }
 
-pub fn p(predicate: Predicate) -> Regex<'static> {
-    Regex::Predicate(predicate)
+impl<'a> Tok<'a> for char {
+    fn tok(self) -> TokenBuilder<'a> {
+        TokenBuilder::Char(self)
+    }
 }
 
-pub fn s(string: &str) -> Regex {
-    Regex::String(string)
+impl<'a> Tok<'a> for &'a str {
+    fn tok(self) -> TokenBuilder<'a> {
+        TokenBuilder::String(self)
+    }
 }
 
-impl<'a> Regex<'a> {
+// impl<'a> Tok<'a> for Predicate {
+//     fn tok(self) -> TokenBuilder<'a> {
+//         TokenBuilder::Predicate(self)
+//     }
+// }
+
+pub fn p(predicate: Predicate) -> TokenBuilder<'static> {
+    TokenBuilder::Predicate(predicate)
+}
+
+impl<'a> TokenBuilder<'a> {
     pub fn rep(self, min: usize, max: Option<usize>) -> Self {
         if let Some(max) = max {
             if min > max {
@@ -34,7 +48,7 @@ impl<'a> Regex<'a> {
             }
         }
         
-        Regex::Repeat(Box::new(self), min, max)
+        TokenBuilder::Repeat(Box::new(self), min, max)
     }
 
     pub fn rep0(self) -> Self {
@@ -52,12 +66,12 @@ impl<'a> Regex<'a> {
 
 #[cfg(test)]
 mod regex_should {
-    use super::{c, s, Regex};
+    use super::{TokenBuilder, Tok};
 
     #[test]
     fn make_repeat_3_4_when_rep_min_is_3_and_max_is_4() {
-        let actual = s("abc").rep(3, Some(4));
-        let expected = Regex::Repeat(Box::new(Regex::String("abc")), 3, Some(4));
+        let actual = "abc".tok().rep(3, Some(4));
+        let expected = TokenBuilder::Repeat(Box::new(TokenBuilder::String("abc")), 3, Some(4));
 
         assert_eq!(expected, actual);
     }
@@ -66,49 +80,49 @@ mod regex_should {
     #[test]
     #[should_panic]
     fn panic_when_rep_min_is_4_and_max_is_3() {
-        let _ = s("abc").rep(4, Some(3));
+        let _ = "abc".tok().rep(4, Some(3));
     }
 
     #[test]
     fn make_repeat_0_1_when_opt() {
-        let actual = c('a').opt();
-        let expected = Regex::Repeat(Box::new(Regex::Char('a')), 0, Some(1));
+        let actual = 'a'.tok().opt();
+        let expected = TokenBuilder::Repeat(Box::new(TokenBuilder::Char('a')), 0, Some(1));
 
         assert_eq!(expected, actual);
     }
 }
 
-impl<'a> ops::BitAnd<Regex<'a>> for Regex<'a> {
-    type Output = Regex<'a>;
+impl<'a> ops::BitAnd<TokenBuilder<'a>> for TokenBuilder<'a> {
+    type Output = TokenBuilder<'a>;
 
-    fn bitand(self, rhs: Regex<'a>) -> Regex<'a> {
-        Regex::And(Box::new(self), Box::new(rhs))
+    fn bitand(self, rhs: TokenBuilder<'a>) -> TokenBuilder<'a> {
+        TokenBuilder::And(Box::new(self), Box::new(rhs))
     }
 }
 
-impl<'a> ops::BitOr<Regex<'a>> for Regex<'a> {
-    type Output = Regex<'a>;
+impl<'a> ops::BitOr<TokenBuilder<'a>> for TokenBuilder<'a> {
+    type Output = TokenBuilder<'a>;
 
-    fn bitor(self, rhs: Regex<'a>) -> Regex<'a> {
-        Regex::And(Box::new(self), Box::new(rhs))
+    fn bitor(self, rhs: TokenBuilder<'a>) -> TokenBuilder<'a> {
+        TokenBuilder::And(Box::new(self), Box::new(rhs))
     }
 }
 
 #[cfg(test)]
 mod regex_and_should {
-    use super::{c, Regex};
+    use super::{Tok, TokenBuilder};
 
     #[test]
     fn make_and_char_a_char_b () {
-        let actual = c('a') & c('b');
-        let expected = Regex::And(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
+        let actual ='a'.tok() & 'b'.tok();
+        let expected = TokenBuilder::And(Box::new(TokenBuilder::Char('a')), Box::new(TokenBuilder::Char('b')));
 
         assert_eq!(expected, actual);
     }
 }
 
 #[allow(non_upper_case_globals)]
-const eof: Regex = Regex::Eof;
+const eof: TokenBuilder = TokenBuilder::Eof;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Position {
@@ -188,7 +202,7 @@ pub struct StringCharStream<'a> {
 impl<'a> StringCharStream<'a> {
     pub fn new(s: &'a str) -> Self {
         let mut items = s.char_indices();
-        let next = items.next().map(|(_, char)| char);
+        let next = items.next().map(|(_, c)| c);
         StringCharStream {
             items,
             next,
@@ -204,7 +218,7 @@ impl<'a> CharStream for StringCharStream<'a> {
     }
 
     fn next(&mut self) {
-        self.next = self.items.next().map(|(_, char)| char);
+        self.next = self.items.next().map(|(_, c)| c);
 
         if let Some(next) = self.next {
             if next == '\n' || next == '\r' {

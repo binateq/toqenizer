@@ -1,4 +1,4 @@
-use super::{Predicate, Regex, CharStream, ParseError, Error};
+use super::{Predicate, TokenBuilder, CharStream, ParseError, Error};
 
 fn parse_char(char: char, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     if let Some(next_char) = stream.peek() {
@@ -57,7 +57,7 @@ fn parse_string(string: &str, buffer: &mut Vec<char>, stream: &mut dyn CharStrea
     Ok(())
 }
 
-fn parse_repeat(regex: &Regex, min: usize, max: Option<usize>, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_repeat(regex: &TokenBuilder, min: usize, max: Option<usize>, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     let buffer_length = buffer.len();
     stream.store_state();
 
@@ -87,7 +87,7 @@ fn parse_repeat(regex: &Regex, min: usize, max: Option<usize>, buffer: &mut Vec<
     Ok(())
 }
 
-fn parse_and(regex1: &Regex, regex2: &Regex, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_and(regex1: &TokenBuilder, regex2: &TokenBuilder, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     let buffer_length = buffer.len();
     stream.store_state();
 
@@ -106,7 +106,7 @@ fn parse_and(regex1: &Regex, regex2: &Regex, buffer: &mut Vec<char>, stream: &mu
     }
 }
 
-fn parse_or(regex1: &Regex, regex2: &Regex, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_or(regex1: &TokenBuilder, regex2: &TokenBuilder, buffer: &mut Vec<char>, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     let buffer_length = buffer.len();
     stream.store_state();
 
@@ -131,19 +131,19 @@ fn parse_eof(stream: &mut dyn CharStream) -> Result<(), ParseError> {
     }
 }
 
-fn parse_into_buffer(buffer: &mut Vec::<char>, regex: &Regex, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_into_buffer(buffer: &mut Vec::<char>, regex: &TokenBuilder, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     match regex {
-        Regex::Char(char) => parse_char(*char, buffer, stream),
-        Regex::Predicate(predicate) => parse_predicate(predicate, buffer, stream),
-        Regex::String(string) => parse_string(*string, buffer, stream),
-        Regex::Repeat(regex, min, max) => parse_repeat(regex.as_ref(), *min, *max, buffer, stream),
-        Regex::And(regex1, regex2) => parse_and(regex1.as_ref(), regex2.as_ref(), buffer, stream),
-        Regex::Or(regex1, regex2) => parse_or(regex1.as_ref(), regex2.as_ref(), buffer, stream),
-        Regex::Eof => parse_eof(stream)
+        TokenBuilder::Char(char) => parse_char(*char, buffer, stream),
+        TokenBuilder::Predicate(predicate) => parse_predicate(predicate, buffer, stream),
+        TokenBuilder::String(string) => parse_string(*string, buffer, stream),
+        TokenBuilder::Repeat(regex, min, max) => parse_repeat(regex.as_ref(), *min, *max, buffer, stream),
+        TokenBuilder::And(regex1, regex2) => parse_and(regex1.as_ref(), regex2.as_ref(), buffer, stream),
+        TokenBuilder::Or(regex1, regex2) => parse_or(regex1.as_ref(), regex2.as_ref(), buffer, stream),
+        TokenBuilder::Eof => parse_eof(stream)
     }
 }
 
-pub fn parse(regex: &Regex, stream: &mut dyn CharStream) -> Result<String, ParseError> {
+pub fn parse(regex: &TokenBuilder, stream: &mut dyn CharStream) -> Result<String, ParseError> {
     let mut buffer = Vec::new();
     
     if let Err(parse_error) = parse_into_buffer(&mut buffer, regex, stream) {
@@ -156,12 +156,12 @@ pub fn parse(regex: &Regex, stream: &mut dyn CharStream) -> Result<String, Parse
 #[cfg(test)]
 mod parse_should {
     use super::parse;
-    use super::super::{StringCharStream, c, p, eof};
+    use super::super::{StringCharStream, Tok, p, eof};
 
     #[test]
     fn parse_abc_when_regex_is_abc_eof() {
         let mut stream = StringCharStream::new("abc");
-        let regex = c('a') & c('b') & c('c') & eof;
+        let regex = 'a'.tok() & 'b'.tok() & 'c'.tok() & eof;
 
         assert_eq!(Ok("abc".to_string()), parse(&regex, &mut stream));
     }
@@ -169,7 +169,7 @@ mod parse_should {
     #[test]
     fn parse_digits() {
         let mut stream = StringCharStream::new("1234567.89");
-        let digits1 = p(|c| c.is_digit(10)).rep1();
+        let digits1 = p(|c: char| c.is_digit(10)).rep1();
 
         assert_eq!(Ok("1234567".to_string()), parse(&digits1, &mut stream));
         assert_eq!(Some('.'), stream.next);
