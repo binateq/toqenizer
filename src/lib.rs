@@ -3,7 +3,7 @@ use std::str::CharIndices;
 
 type Predicate = fn(char) -> bool;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenBuilder<'a> {
     Char(char),
     Predicate(Predicate),
@@ -12,6 +12,9 @@ pub enum TokenBuilder<'a> {
     And(Box<TokenBuilder<'a>>, Box<TokenBuilder<'a>>),
     Or(Box<TokenBuilder<'a>>, Box<TokenBuilder<'a>>),
     Eof
+    // TODO: Skip
+    // TODO: Case Insensitive
+    // TODO: Convert strings like \x0A to '\n' or \u0041 to 'A'
 }
 
 pub trait Tok<'a> {
@@ -30,6 +33,7 @@ impl<'a> Tok<'a> for &'a str {
     }
 }
 
+// TODO: Try to implement Tok for Predicate. Now I get the compiler error when I'm using tok().
 // impl<'a> Tok<'a> for Predicate {
 //     fn tok(self) -> TokenBuilder<'a> {
 //         TokenBuilder::Predicate(self)
@@ -330,6 +334,98 @@ pub enum Error {
 pub struct ParseError {
     error: Error,
     position: Position
+}
+
+pub type Mapper<Token> = fn(&str) -> Token;
+
+#[derive(Debug, PartialEq)]
+pub struct Tokenizer<'a, Token> {
+    builder: TokenBuilder<'a>,
+    mapper: Mapper<Token>
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Rule<'a, Token> {
+    Single(Tokenizer<'a, Token>),
+    Multiple(Vec<Tokenizer<'a, Token>>)
+}
+
+impl<'a, Token> ops::Shr<Mapper<Token>> for TokenBuilder<'a> {
+    type Output = Rule<'a, Token>;
+    
+    fn shr(self, rhs: Mapper<Token>) -> Self::Output {
+        Rule::Single(Tokenizer {
+            builder: self,
+            mapper: rhs
+        })
+    }
+}
+
+impl<'a, Token> ops::BitOr<Rule<'a, Token>> for Rule<'a, Token> {
+    type Output = Rule<'a, Token>;
+
+    fn bitor(self, rhs: Rule<'a, Token>) -> Rule<'a, Token> {
+        match (self, rhs) {
+            (Rule::Single(tokenizer1), Rule::Single(tokenizer2)) =>
+                Rule::Multiple(vec![tokenizer1, tokenizer2]),
+            (Rule::Single(tokenizer1), Rule::Multiple(tokenizers2)) => {
+                let mut result = vec![tokenizer1];
+                result.extend(tokenizers2);
+                
+                Rule::Multiple(result)
+            },
+            (Rule::Multiple(mut tokenizers1), Rule::Single(tokenizer2)) => {
+                tokenizers1.push(tokenizer2);
+
+                Rule::Multiple(tokenizers1)
+            },
+            (Rule::Multiple(mut tokenizers1), Rule::Multiple(tokenizers2)) => {
+                tokenizers1.extend(tokenizers2);
+
+                Rule::Multiple(tokenizers1)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tokenizer_should {
+    use super::{p, Rule, Tokenizer};
+
+    #[derive(Debug, PartialEq)]
+    enum Token {
+        Identifier(String),
+        Integer(u32)
+    }
+
+    fn make_identifier(name: &str) -> Token {
+        Token::Identifier(name.to_string())
+    }
+
+    fn make_integer(value: &str) -> Token {
+        Token::Integer(u32::from_str_radix(value, 10).unwrap())
+    }
+
+    #[test]
+    fn make_multiple_rules() {
+        let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
+        let integer = p(|c| c.is_digit(10)).rep1();
+
+        let actual = identifier.clone() >> make_identifier
+                                    | integer.clone() >> make_integer;
+        let expected = Rule::Multiple(vec![
+            Tokenizer {
+                builder: identifier,
+                mapper: make_identifier
+            },
+            Tokenizer {
+                builder: integer,
+                mapper: make_integer
+            }
+        ]);
+
+        assert_eq!(expected, actual);
+    }
 }
 
 pub mod parser;
