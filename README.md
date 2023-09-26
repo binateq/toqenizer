@@ -8,17 +8,31 @@ Rust crate to making lexical analizers.
 let digit = @is_ascii_digit;
 let letter = @is_ascii_letter;
 let spaces = skip @is_ascii_whitespace*; // just skips spaces from input
-let spaces1 = @{c == ' ' || c == '\t'}+; // `c` is the name of the lambda parameter
+let spaces1 = @{ c == ' ' || c == '\t' }+; // `c` is the name of the lambda
+                                         // parameter
 
 let hex = case insensitive ('0' | '1' | '2' | '3' | '4' | '5' | '6'
     | '7' | '8' | '9' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F');
 
 let identifier = '_' | letter ('_' | letter | digit)*;
-identifier: { Token::Identifier text };
+identifier: { Token::Identifier s };
 
-digit+: { Token::Integer u32::from_str(&text) } // `text` is the name of the lambda parameter
+digit+: { Token::Integer u32::from_str(&s) } // `text` is the name of the
+                                             // lambda parameter
 
-skip("0x") hex+: { Token::Hexadecimal text } // hexadecimal digits only without prefix "0x" because `skip`
+skip("0x") hex+: { Token::Hexadecimal s } // hexadecimal digits only without
+                                          // prefix "0x" because `skip`
+
+string = skip '"'
+         ( @{c != '"' && c != '\\' && c != '\n' && c != '\r'}
+         | "\\\\": "\\"
+         | "\\\"": "\""
+         | "\\n": "\n"
+         | skip "\" digit{1, 3}: {
+             char.from_u32_unchecked(u32::from_str_radix(&s, 10).unwrap())
+           }
+         )*
+         skip '"';
 ```
 
 ## BNF of syntax
@@ -34,12 +48,14 @@ rule = regexps ":" "{" Rust_expression "}"
 
 regexps = regexp { regexp }
 
-regexp = "'" char "'"
-       | '"' string '"'
+regexp = char // char in aptstrophes like 'a' or '\n'
+       | string // string in quotes like "let" or "\"foo\""
        | regexp "?"
        | regexp "*"
        | regexp "+"
        | regexp "{" uint "," uint "}"
+       | regexp ":" string
+       | regexp ":" "{" Rust_expression "}"
        | "skip" regexp
        | "case" "insensitive" regexp
        | identifier
