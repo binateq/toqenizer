@@ -1,4 +1,5 @@
-use super::{Predicate, TokenBuilder, CharStream, ParseError, Error, Tokenizer, Rule};
+use super::{Predicate, TokenBuilder, ParseError, Error, Tokenizer, Rule};
+use super::stream::CharStream;
 
 fn parse_char(char: char, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     if let Some(next_char) = stream.peek() {
@@ -155,8 +156,11 @@ pub fn parse_builder(builder: &TokenBuilder, stream: &mut dyn CharStream) -> Res
 
 #[cfg(test)]
 mod parse_builder_should {
+    use crate::stream::CharStream;
+
     use super::parse_builder;
-    use super::super::{StringCharStream, Tok, p, eof};
+    use super::super::{Tok, p, eof};
+    use super::super::stream::StringCharStream;
 
     #[test]
     fn parse_abc_when_regex_is_abc_eof() {
@@ -172,7 +176,7 @@ mod parse_builder_should {
         let digits1 = p(|c: char| c.is_digit(10)).rep1();
 
         assert_eq!(Ok("1234567".to_string()), parse_builder(&digits1, &mut stream));
-        assert_eq!(Some('.'), stream.next);
+        assert_eq!(Some('.'), stream.peek());
     }
 }
 
@@ -201,10 +205,9 @@ pub fn parse_rule<'a, Token>(rule: &Rule<'a, Token>, stream: &mut dyn CharStream
 
 #[cfg(test)]
 mod parse_rule_should {
-    use crate::Position;
-
-    use super::super::{p, StringCharStream, Error, ParseError};
     use super::parse_rule;
+    use super::super::{p, Position, Error, ParseError};
+    use super::super::stream::StringCharStream;
 
     #[derive(Debug, PartialEq)]
     enum Token {
@@ -257,8 +260,8 @@ mod parse_rule_should {
         let integer = p(|c| c.is_digit(10)).rep1();
 
         let rule
-            = identifier.clone() >> make_identifier
-            | integer.clone() >> make_integer;
+            = identifier >> make_identifier
+            | integer >> make_integer;
 
         let actual = parse_rule(&rule, &mut stream);
 
