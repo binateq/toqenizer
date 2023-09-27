@@ -42,25 +42,25 @@ analyzer_description = { statement }
 
 statement = ( assignment | rule ) ";"
 
-assignment = "let" identifier "=" regexps
+assignment = "let" identifier "=" regexp
 
-rule = regexps ":" "{" Rust_expression "}"
+rule = regexp ":" "{" Rust_expression "}"
 
-regexps = regexp { regexp }
+regexp = element { element }
 
-regexp = char // char in aptstrophes like 'a' or '\n'
-       | string // string in quotes like "let" or "\"foo\""
-       | regexp "?"
-       | regexp "*"
-       | regexp "+"
-       | regexp "{" uint "," uint "}"
-       | regexp ":" string
-       | regexp ":" "{" Rust_expression "}"
-       | "skip" regexp
-       | "case" "insensitive" regexp
-       | identifier
-       | "@" identifier
-       | "@" "{" Rust_expression "}"
-       | regexp "|" regexp
-       | "(" regexps ")"
+element = char // char in aptstrophes like 'a' or '\n'
+        | string // string in quotes like "let" or "\"foo\""
+        | element "?"
+        | element "*"
+        | element "+"
+        | element "{" uint "," uint "}"
+        | element "=>" string
+        | element "=>" "{" Rust_expression "}"
+        | "skip" element
+        | "case" "insensitive" element
+        | identifier
+        | "@" identifier
+        | "@" "{" Rust_expression "}"
+        | element "|" element
+        | "(" regexp ")"
 ```
