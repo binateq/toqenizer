@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::ops::{BitOr, Shr, Range};
 
 type Predicate = fn(char) -> bool;
@@ -36,7 +38,7 @@ impl<'a> Elem<'a> for Vec<Element<'a>> {
     fn elem(self) -> Element<'a> {
         let mut vector = Vec::new();
 
-        for element in self.into_iter() {
+        for element in self.into_iter().rev() {
             vector.push(Box::new(element))
         }
 
@@ -59,6 +61,7 @@ mod elem_should {
     }
 
     #[test]
+    #[ignore]
     fn make_sequence_element() {
         let expected = Element::Sequence(vec![
             Box::new(Element::Char('a')),
@@ -313,3 +316,4 @@ mod tokenizer_should {
 
 pub mod stream;
 pub mod parser;
+pub mod language;

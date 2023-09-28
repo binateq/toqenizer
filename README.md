@@ -48,7 +48,7 @@ rule = regexp ":" "{" Rust_expression "}"
 
 regexp = element { element }
 
-element = char // char in aptstrophes like 'a' or '\n'
+element = char // char in apostrophes like 'a' or '\n'
         | string // string in quotes like "let" or "\"foo\""
         | element "?"
         | element "*"

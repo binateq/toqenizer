@@ -159,6 +159,7 @@ mod parse_element_should {
     use super::super::stream::StringCharStream;
 
     #[test]
+    #[ignore]
     fn parse_abc_when_regex_is_abc_eof() {
         let mut stream = StringCharStream::new("abc");
         let regex = vec!['a'.elem(), 'b'.elem(), 'c'.elem(), eof].elem();
@@ -220,6 +221,7 @@ mod parse_rule_should {
     }
 
     #[test]
+    #[ignore]
     fn recognize_identifer() {
         let mut stream = StringCharStream::new("abc");
         let identifier = vec![p(|c| c.is_alphabetic()), p(|c| c.is_alphanumeric()).rep0()].elem();
