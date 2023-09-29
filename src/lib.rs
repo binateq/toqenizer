@@ -1,6 +1,6 @@
 #![recursion_limit = "256"]
 
-use std::ops::{BitOr, Shr, Range};
+use std::ops::{BitAnd, BitOr, Shr, Range};
 
 type Predicate = fn(char) -> bool;
 
@@ -10,7 +10,7 @@ pub enum Element<'a> {
     Predicate(Predicate),
     String(&'a str),
     Repeat(Box<Element<'a>>, Range<u32>),
-    Sequence(Vec<Box<Element<'a>>>),
+    And(Box<Element<'a>>, Box<Element<'a>>),
     Or(Box<Element<'a>>, Box<Element<'a>>),
     Eof
     // TODO: Skip
@@ -34,18 +34,6 @@ impl<'a> Elem<'a> for &'a str {
     }
 }
 
-impl<'a> Elem<'a> for Vec<Element<'a>> {
-    fn elem(self) -> Element<'a> {
-        let mut vector = Vec::new();
-
-        for element in self.into_iter().rev() {
-            vector.push(Box::new(element))
-        }
-
-        Element::Sequence(vector)
-    }
-}
-
 #[cfg(test)]
 mod elem_should {
     use super::{Element, Elem};
@@ -58,15 +46,6 @@ mod elem_should {
     #[test]
     fn make_string_element() {
         assert_eq!(Element::String("foo"), "foo".elem());
-    }
-
-    #[test]
-    #[ignore]
-    fn make_sequence_element() {
-        let expected = Element::Sequence(vec![
-            Box::new(Element::Char('a')),
-            Box::new(Element::String("foo"))]);
-        assert_eq!(expected, vec!['a'.elem(), "foo".elem()].elem());
     }
 }
 
@@ -106,7 +85,10 @@ mod regex_should {
     #[test]
     fn make_repeat_3_4_when_rep_min_is_3_and_max_is_4() {
         let actual = "abc".elem().rep(3..4);
-        let expected = Element::Repeat(Box::new(Element::String("abc")), 3..4);
+        let expected =
+        Element::Repeat(
+            Box::new(Element::String("abc")),
+            3..4);
 
         assert_eq!(expected, actual);
     }
@@ -115,7 +97,10 @@ mod regex_should {
     #[test]
     fn make_repeat_4_3_when_rep_min_is_4_and_max_is_3() {
         let actual = "abc".elem().rep(4..3);
-        let expected = Element::Repeat(Box::new(Element::String("abc")), 4..3);
+        let expected =
+        Element::Repeat(
+            Box::new(Element::String("abc")),
+            4..3);
 
         assert_eq!(expected, actual);
     }
@@ -123,7 +108,36 @@ mod regex_should {
     #[test]
     fn make_repeat_0_1_when_opt() {
         let actual = 'a'.elem().opt();
-        let expected = Element::Repeat(Box::new(Element::Char('a')), 0..1);
+        let expected =
+        Element::Repeat(
+            Box::new(Element::Char('a')),
+            0..1);
+
+        assert_eq!(expected, actual);
+    }
+}
+
+impl<'a> BitAnd<Element<'a>> for Element<'a> {
+    type Output = Element<'a>;
+
+    fn bitand(self, rhs: Element<'a>) -> Element<'a> {
+        Element::And(Box::new(self), Box::new(rhs))
+    }
+}
+
+#[cfg(test)]
+mod regex_and_should {
+    use super::{Elem, Element};
+
+    #[test]
+    fn make_and_char_a_char_b_char_c () {
+        let actual ='a'.elem() & 'b'.elem() & 'c'.elem();
+        let expected =
+        Element::And(
+            Box::new(Element::And(
+                Box::new(Element::Char('a')), 
+                Box::new(Element::Char('b')))), 
+            Box::new(Element::Char('c')));
 
         assert_eq!(expected, actual);
     }
@@ -144,7 +158,10 @@ mod regex_or_should {
     #[test]
     fn make_or_char_a_char_b () {
         let actual ='a'.elem() | 'b'.elem();
-        let expected = Element::Or(Box::new(Element::Char('a')), Box::new(Element::Char('b')));
+        let expected =
+        Element::Or(
+            Box::new(Element::Char('a')),
+            Box::new(Element::Char('b')));
 
         assert_eq!(expected, actual);
     }
@@ -275,7 +292,7 @@ impl<'a, Token> BitOr<Rule<'a, Token>> for Rule<'a, Token> {
 
 #[cfg(test)]
 mod tokenizer_should {
-    use super::{p, Rule, Tokenizer, Elem};
+    use super::{p, Rule, Tokenizer};
 
     #[derive(Debug, PartialEq)]
     enum Token {
@@ -293,7 +310,7 @@ mod tokenizer_should {
 
     #[test]
     fn make_multiple_rules() {
-        let identifier = vec![p(|c| c.is_alphabetic()), p(|c| c.is_alphanumeric()).rep0()].elem();
+        let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
         let integer = p(|c| c.is_digit(10)).rep1();
 
         let actual

@@ -86,17 +86,19 @@ fn parse_repeat(element: &Element, range: &Range<u32>, buffer: &mut String, stre
     Ok(())
 }
 
-fn parse_sequence(elements: &[Box<Element>], buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
+fn parse_and(element1: &Element, element2: &Element, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
     let buffer_length = buffer.len();
     stream.store_state();
 
-    for element in elements {
-        if let Err(parse_error) = parse_into_buffer(buffer, element, stream) {
-            buffer.truncate(buffer_length);
-            stream.restore_state();
-    
-            return Err(parse_error);
-        }
+    if let Err(error) = parse_into_buffer(buffer, element1, stream) {
+        return Err(error);
+    }
+
+    if let Err(error) = parse_into_buffer(buffer, element2, stream) {
+        buffer.truncate(buffer_length);
+        stream.restore_state();
+
+        return Err(error);
     }
 
     stream.discard_state();
@@ -134,7 +136,7 @@ fn parse_into_buffer(buffer: &mut String, element: &Element, stream: &mut dyn Ch
         Element::Predicate(predicate) => parse_predicate(predicate, buffer, stream),
         Element::String(string) => parse_string(*string, buffer, stream),
         Element::Repeat(element, range) => parse_repeat(element.as_ref(), range, buffer, stream),
-        Element::Sequence(elements) => parse_sequence(elements, buffer, stream),
+        Element::And(element1, element2) => parse_and(element1, element2, buffer, stream),
         Element::Or(element1, element2) => parse_or(element1.as_ref(), element2.as_ref(), buffer, stream),
         Element::Eof => parse_eof(stream)
     }
@@ -159,10 +161,9 @@ mod parse_element_should {
     use super::super::stream::StringCharStream;
 
     #[test]
-    #[ignore]
     fn parse_abc_when_regex_is_abc_eof() {
         let mut stream = StringCharStream::new("abc");
-        let regex = vec!['a'.elem(), 'b'.elem(), 'c'.elem(), eof].elem();
+        let regex = 'a'.elem() & 'b'.elem() & 'c'.elem() & eof;
 
         assert_eq!(Ok("abc".to_string()), parse_element(&regex, &mut stream));
     }
@@ -203,7 +204,7 @@ pub fn parse_rule<'a, Token>(rule: &Rule<'a, Token>, stream: &mut dyn CharStream
 #[cfg(test)]
 mod parse_rule_should {
     use super::parse_rule;
-    use super::super::{p, Position, Error, ParseError, Elem};
+    use super::super::{p, ParseError, Error, Position};
     use super::super::stream::StringCharStream;
 
     #[derive(Debug, PartialEq)]
@@ -221,10 +222,9 @@ mod parse_rule_should {
     }
 
     #[test]
-    #[ignore]
     fn recognize_identifer() {
         let mut stream = StringCharStream::new("abc");
-        let identifier = vec![p(|c| c.is_alphabetic()), p(|c| c.is_alphanumeric()).rep0()].elem();
+        let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
         let integer = p(|c| c.is_digit(10)).rep1();
 
         let rule
@@ -239,7 +239,7 @@ mod parse_rule_should {
     #[test]
     fn recognize_integer() {
         let mut stream = StringCharStream::new("123");
-        let identifier = vec![p(|c| c.is_alphabetic()), p(|c| c.is_alphanumeric()).rep0()].elem();
+        let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
         let integer = p(|c| c.is_digit(10)).rep1();
 
         let rule
@@ -254,7 +254,7 @@ mod parse_rule_should {
     #[test]
     fn do_not_recognize_plus_sign() {
         let mut stream = StringCharStream::new("+123");
-        let identifier = vec![p(|c| c.is_alphabetic()), p(|c| c.is_alphanumeric()).rep0()].elem();
+        let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
         let integer = p(|c| c.is_digit(10)).rep1();
 
         let rule
