@@ -138,7 +138,8 @@ fn parse_into_buffer(buffer: &mut String, element: &Element, stream: &mut dyn Ch
         Element::Repeat(element, range) => parse_repeat(element.as_ref(), range, buffer, stream),
         Element::And(element1, element2) => parse_and(element1, element2, buffer, stream),
         Element::Or(element1, element2) => parse_or(element1.as_ref(), element2.as_ref(), buffer, stream),
-        Element::Eof => parse_eof(stream)
+        Element::Eof => parse_eof(stream),
+        Element::Reference(_identifier) => Ok(()),
     }
 }
 

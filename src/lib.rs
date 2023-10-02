@@ -1,4 +1,5 @@
-#![recursion_limit = "256"]
+//#![recursion_limit = "8"]
+//#![feature(trace_macros)]
 
 use std::ops::{BitAnd, BitOr, Shr, Range};
 
@@ -12,7 +13,8 @@ pub enum Element<'a> {
     Repeat(Box<Element<'a>>, Range<u32>),
     And(Box<Element<'a>>, Box<Element<'a>>),
     Or(Box<Element<'a>>, Box<Element<'a>>),
-    Eof
+    Eof,
+    Reference(&'a str)
     // TODO: Skip
     // TODO: Case Insensitive
     // TODO: Convert strings like \x0A to '\n' or \u0041 to 'A'
@@ -58,6 +60,10 @@ mod elem_should {
 
 pub fn p(predicate: Predicate) -> Element<'static> {
     Element::Predicate(predicate)
+}
+
+pub fn r<'a>(identifier: &'a str) -> Element<'a> {
+    Element::Reference(identifier)
 }
 
 impl<'a> Element<'a> {
