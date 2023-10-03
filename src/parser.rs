@@ -155,12 +155,10 @@ pub fn parse_element(element: &Element, stream: &mut dyn CharStream) -> Result<S
 
 #[cfg(test)]
 mod parse_element_should {
-    use super::super::stream::CharStream;
-    use super::super::toq;
-
     use super::parse_element;
-    use super::super::{Elem, p, eof};
-    use super::super::stream::StringCharStream;
+    use super::super::{Elem, Element, p, eof, toq};
+    use super::super::stream::{CharStream, StringCharStream};
+
 
     #[test]
     fn parse_abc_when_regex_is_abc_eof() {
@@ -180,12 +178,30 @@ mod parse_element_should {
     }
 
     #[test]
-    fn parse_whith_is_ascii_digit() {
+    fn parse_macro_with_is_ascii_digit() {
         let mut stream = StringCharStream::new("1234abcd");
         let digits1 = toq!(@is_ascii_digit+);
 
         assert_eq!(Ok("1234".to_string()), parse_element(&digits1, &mut stream));
         assert_eq!(Some('a'), stream.peek());
+    }
+
+    #[test]
+    fn parse_predicate() {
+        let mut stream = StringCharStream::new("1234.abcd");
+        let not_dot = Element::Predicate(|c| c != '.').rep1();
+
+        assert_eq!(Ok("1234".to_string()), parse_element(&not_dot, &mut stream));
+        assert_eq!(Some('.'), stream.peek());
+    }
+
+    #[test]
+    fn parse_macro_with_expression() {
+        let mut stream = StringCharStream::new("1234.abcd");
+        let not_dot = toq!(@{|c| c != '.'}+);
+
+        assert_eq!(Ok("1234".to_string()), parse_element(&not_dot, &mut stream));
+        assert_eq!(Some('.'), stream.peek());
     }
 }
 

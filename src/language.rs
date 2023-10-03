@@ -1,5 +1,3 @@
-//trace_macros!(true);
-
 #[macro_export]
 macro_rules! toq {
     // Postfix unary operators
@@ -62,12 +60,12 @@ macro_rules! toq {
         toq!([$($operator_stack),*] [crate::Element::Predicate(|c| c.$identifier()), $($value_stack),*] $($rest)*)
     };
 
-    ([$($operator_stack:tt),*] [] @ $predicate:block $($rest:tt)*) => {
-        toq!([$($operator_stack),*] [crate::Element::Predicate(|c| $block)] $($rest)*)
+    ([$($operator_stack:tt),*] [] @ { $predicate:expr } $($rest:tt)*) => {
+        toq!([$($operator_stack),*] [crate::Element::Predicate($predicate)] $($rest)*)
     };
 
-    ([$($operator_stack:tt),*] [$($value_stack:expr),*] @ $predicate:block $($rest:tt)*) => {
-        toq!([$($operator_stack),*] [crate::Element::Predicate(|c| $block), $($value_stack),*] $($rest)*)
+    ([$($operator_stack:tt),*] [$($value_stack:expr),*] @ { $predicate:expr } $($rest:tt)*) => {
+        toq!([$($operator_stack),*] [crate::Element::Predicate($predicate), $($value_stack),*] $($rest)*)
     };
 
     // Literals and identifiers
