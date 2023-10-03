@@ -155,7 +155,8 @@ pub fn parse_element(element: &Element, stream: &mut dyn CharStream) -> Result<S
 
 #[cfg(test)]
 mod parse_element_should {
-    use crate::stream::CharStream;
+    use super::super::stream::CharStream;
+    use super::super::toq;
 
     use super::parse_element;
     use super::super::{Elem, p, eof};
@@ -176,6 +177,15 @@ mod parse_element_should {
 
         assert_eq!(Ok("1234567".to_string()), parse_element(&digits1, &mut stream));
         assert_eq!(Some('.'), stream.peek());
+    }
+
+    #[test]
+    fn parse_whith_is_ascii_digit() {
+        let mut stream = StringCharStream::new("1234abcd");
+        let digits1 = toq!(@is_ascii_digit+);
+
+        assert_eq!(Ok("1234".to_string()), parse_element(&digits1, &mut stream));
+        assert_eq!(Some('a'), stream.peek());
     }
 }
 
@@ -233,8 +243,9 @@ mod parse_rule_should {
             | integer.clone() >> make_integer;
 
         let actual = parse_rule(&rule, &mut stream);
+        let expected = Ok(Token::Identifier("abc".to_string()));
 
-        assert_eq!(Ok(Token::Identifier("abc".to_string())), actual);
+        assert_eq!(expected, actual);
     }
 
     #[test]
@@ -248,8 +259,9 @@ mod parse_rule_should {
             | integer.clone() >> make_integer;
 
         let actual = parse_rule(&rule, &mut stream);
+        let expected = Ok(Token::Integer(123));
 
-        assert_eq!(Ok(Token::Integer(123)), actual);
+        assert_eq!(expected, actual);
     }
 
     #[test]

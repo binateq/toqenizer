@@ -52,6 +52,24 @@ macro_rules! toq {
         toq!([$($operator_stack),*] [ $left | $right $(, $value_stack)* ] $($rest)*)
     };
 
+    // Lambdas
+
+    ([] [] @ $identifier:ident $($rest:tt)*) => {
+        toq!([] [crate::Element::Predicate(|c| c.$identifier())] $($rest)*)
+    };
+
+    ([$($operator_stack:tt),*] [$($value_stack:expr),*] @ $identifier:ident $($rest:tt)*) => {
+        toq!([$($operator_stack),*] [crate::Element::Predicate(|c| c.$identifier()), $($value_stack),*] $($rest)*)
+    };
+
+    ([$($operator_stack:tt),*] [] @ $predicate:block $($rest:tt)*) => {
+        toq!([$($operator_stack),*] [crate::Element::Predicate(|c| $block)] $($rest)*)
+    };
+
+    ([$($operator_stack:tt),*] [$($value_stack:expr),*] @ $predicate:block $($rest:tt)*) => {
+        toq!([$($operator_stack),*] [crate::Element::Predicate(|c| $block), $($value_stack),*] $($rest)*)
+    };
+
     // Literals and identifiers
 
     ([] [] $constant:literal $($rest:tt)*) => {
