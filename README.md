@@ -51,6 +51,8 @@ regexp = element { element }
 element = char // char in apostrophes like 'a' or '\n'
         | string // string in quotes like "let" or "\"foo\""
         | identifier // reference to regexp definition
+        | "@" identifier
+        | "@" "{" Rust_expression "}"
         | element "?"
         | element "*"
         | element "+"
@@ -59,8 +61,6 @@ element = char // char in apostrophes like 'a' or '\n'
         | element "=>" "{" Rust_expression "}"
         | "skip" element
         | "case" "insensitive" element
-        | "@" identifier
-        | "@" "{" Rust_expression "}"
         | element "|" element
         | "(" regexp ")"
 ```

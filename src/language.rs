@@ -2,107 +2,120 @@
 macro_rules! toq {
     // Postfix unary operators
 
-    ([ $($operator_stack:tt),* ] [ $last:expr $(, $value_stack:expr)* ] ? $($rest:tt)*) => {
-        toq!([ $($operator_stack),* ] [ $last.opt() $(, $value_stack)* ] $($rest)*)
+    ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] ? $($rest:tt)*) => {
+        toq!([ $($operator_stack)* ] [$last.opt() $(, $value_stack)*] $($rest)*)
     };
 
-    ([ $($operator_stack:tt),* ] [ $last:expr $(, $value_stack:expr)* ] * $($rest:tt)*) => {
-        toq!([ $($operator_stack),* ] [ $last.rep0() $(, $value_stack)* ] $($rest)*)
+    ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] * $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [$last.rep0() $(, $value_stack)*] $($rest)*)
     };
 
-    ([ $($operator_stack:tt),* ] [ $last:expr $(, $value_stack:expr)* ] + $($rest:tt)*) => {
-        toq!([ $($operator_stack),* ] [ $last.rep1() $(, $value_stack)* ] $($rest)*)
+    ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] + $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [$last.rep1() $(, $value_stack)*] $($rest)*)
     };
 
-    ([ $($operator_stack:tt),* ] [ $last:expr $(, $value_stack:expr)* ] { $min:literal , $max:literal } $($rest:tt)*) => {
-        toq!([ $($operator_stack),* ] [ $last.rep($min..$max) $(, $value_stack)* ] $($rest)*)
+    ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] { $min:literal , $max:literal } $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [$last.rep($min..$max) $(, $value_stack)*] $($rest)*)
     };
 
-    // Binary &
+    // Keywords
 
-    ([& $(, $operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] $constant:literal $($rest:tt)*) => {
-        toq!([& $(, $operator_stack)*] [crate::Elem::elem($constant), $left & $right $(, $value_stack)*] $($rest)*)
+    ([begin $($operator_stack:tt)*] [$($value_stack:expr)*] end $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [$($value_stack)*] $($rest)*)
     };
 
-    ([& $(, $operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] $identifier:ident $($rest:tt)*) => {
-        toq!([& $(, $operator_stack)*] [crate::r(stringify!($identifier)), $left & $right $(, $value_stack)*] $($rest)*)
+    ([$($operator_stack:tt)*] [$($value_stack:expr)*] end $($rest:tt)*) => {
+        compile_error!(concat!(
+            "Unpair close parentheses ')'. Rest tokens: ",
+            stringify!($($rest)*)
+        ))
     };
 
-    // Binary |
-
-    ([] [$($value_stack:expr),*] | $($rest:tt)*) => {
-        toq!([|] [$($value_stack),*] $($rest)*)
+    ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] end $($rest:tt)*) => {
+        toq!([$($operator_stack),*] [$left & $right $(, $value_stack)*] end $($rest)*)
     };
 
-    ([& $(, $operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] | $($rest:tt)*) => {
-        toq!([| $(, $operator_stack)*] [$left & $right $(, $value_stack)*] $($rest)*)
+    ([| $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] end $($rest:tt)*) => {
+        toq!([$($operator_stack),*] [$left | $right $(, $value_stack)*] end $($rest)*)
     };
 
-    ([| $(, $operator_stack:tt)* ][$($value_stack:expr),*] $constant:literal $($rest:tt)*) => {
-        toq!([| $(, $operator_stack)*] [crate::Elem::elem($constant), $($value_stack),*] $($rest)*)
+    // Reduce AND (&) when two primitives on value stack
+
+    ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] $constant:literal $($rest:tt)*) => {
+        toq!([& $($operator_stack)*] [crate::Elem::elem($constant), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
-    ([| $(, $operator_stack:tt)* ][$($value_stack:expr),*] $identifier:ident $($rest:tt)*) => {
-        toq!([| $(, $operator_stack)*] [crate::r(!stringify($identifier)), $($value_stack),*] $($rest)*)
+    ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] $identifier:ident $($rest:tt)*) => {
+        toq!([& $($operator_stack)*] [crate::r(stringify!($identifier)), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
-    ([|, $($operator_stack:tt),*] [$right:expr, $left:expr $(, $value_stack:expr)*]) => {
-        toq!([$($operator_stack),*] [ $left | $right $(, $value_stack)* ] $($rest)*)
+    ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] @ $identifier:ident $($rest:tt)*) => {
+        toq!([& $($operator_stack)*] [crate::Element::Predicate(|c| c.$identifier()), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
-    // Lambdas
-
-    ([] [] @ $identifier:ident $($rest:tt)*) => {
-        toq!([] [crate::Element::Predicate(|c| c.$identifier())] $($rest)*)
+    ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr),*] @ { $predicate:expr } $($rest:tt)*) => {
+        toq!([& $($operator_stack)*] [crate::Element::Predicate($predicate), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
-    ([$($operator_stack:tt),*] [$($value_stack:expr),*] @ $identifier:ident $($rest:tt)*) => {
-        toq!([$($operator_stack),*] [crate::Element::Predicate(|c| c.$identifier()), $($value_stack),*] $($rest)*)
+    // Push AND (&) when begin on operator stack
+
+    ([begin $($operator_stack:tt)*] [$($value_stack:expr),+] $constant:literal $($rest:tt)*) => {
+        toq!([& begin $($operator_stack)*] [crate::Elem::elem($constant) $(, $value_stack)+] $($rest)*)
     };
 
-    ([$($operator_stack:tt),*] [] @ { $predicate:expr } $($rest:tt)*) => {
-        toq!([$($operator_stack),*] [crate::Element::Predicate($predicate)] $($rest)*)
+    ([begin $($operator_stack:tt)*] [$($value_stack:expr),+] $identifier:ident $($rest:tt)*) => {
+        toq!([& begin $($operator_stack)*] [crate::r(stringify!($identifier)) $(, $value_stack)+] $($rest)*)
+    };
+
+    ([begin $($operator_stack:tt)*] [$($value_stack:expr),+] @ $identifier:ident $($rest:tt)*) => {
+        toq!([& begin $($operator_stack)*] [crate::Element::Predicate(|c| c.$identifier()) $(, $value_stack)+] $($rest)*)
+    };
+
+    ([begin $($operator_stack:tt)*] [$($value_stack:expr),+] @ { $predicate:expr } $($rest:tt)*) => {
+        toq!([& begin $($operator_stack)*] [crate::Element::Predicate($predicate) $(, $value_stack)+] $($rest)*)
+    };
+
+    // Reduce OR (|) when AND/OR on operator stack
+
+    ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] | $($rest:tt)*) => {
+        toq!([| $($operator_stack)*] [$left & $right $(, $value_stack)*] $($rest)*)
+    };
+
+    ([| $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] | $($rest:tt)*) => {
+        toq!([| $($operator_stack)*] [$left | $right $(, $value_stack)*] $($rest)*)
+    };
+
+    // Push OR (|) when no AND/OR on operator stack
+
+    ([$($operator_stack:tt)*] [$($value_stack:expr),*] | $($rest:tt)*) => {
+        toq!([| $($operator_stack)*] [$($value_stack),*] $($rest)*)
+    };
+
+    // Push primitives to value stack when no other conditions
+
+    ([$($operator_stack:tt)*] [$($value_stack:expr),*] $constant:literal $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [crate::Elem::elem($constant) $(, $value_stack)*] $($rest)*)
+    };
+
+    ([$($operator_stack:tt)*] [$($value_stack:expr),*] $identifier:ident $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [crate::r(stringify!($identifier)) $(, $value_stack)*] $($rest)*)
+    };
+
+    ([$($operator_stack:tt)*] [$($value_stack:expr),*] @ $identifier:ident $($rest:tt)*) => {
+        toq!([$($operator_stack),*] [crate::Element::Predicate(|c| c.$identifier()) $(, $value_stack)*] $($rest)*)
     };
 
     ([$($operator_stack:tt),*] [$($value_stack:expr),*] @ { $predicate:expr } $($rest:tt)*) => {
-        toq!([$($operator_stack),*] [crate::Element::Predicate($predicate), $($value_stack),*] $($rest)*)
+        toq!([$($operator_stack),*] [crate::Element::Predicate($predicate) $(, $value_stack)*] $($rest)*)
     };
 
-    // Literals and identifiers
+    // Parentheses
 
-    ([] [] $constant:literal $($rest:tt)*) => {
-        toq!([] [crate::Elem::elem($constant)]  $($rest)*)
-    };
-
-    ([] [] $identifier:ident $($rest:tt)*) => {
-        toq!([] [crate::r(stringify!($identifier))]  $($rest)*)
-    };
-
-    ([] [$term:expr] $constant:literal $($rest:tt)*) => {
-        toq!([&] [crate::Elem::elem($constant), $term] $($rest)*)
-    };
-
-    ([] [$term:expr] $identifier:ident $($rest:tt)*) => {
-        toq!([&] [crate::r(stringify!($identifier)), $term] $($rest)*)
+    ([$($operator_stack:tt),*] [$($value_stack:expr),*] ( $($inner:tt)+ ) $($rest:tt)*) => {
+        toq!([begin $($operator_stack),*] [$($value_stack),*] $($inner)+ end $($rest)*)
     };
 
     // Final rules
-
-    ([&] [$right:expr, $left:expr $(, $value_stack:expr)*]) => {
-        toq!([] [$left & $right $(, $value_stack)*])
-    };
-
-    ([|] [$right:expr, $left:expr $(, $value_stack:expr)*]) => {
-        toq!([] [$left | $right $(, $value_stack)*])
-    };
-
-    ([&, $($operator_stack:tt),*] [$right:expr, $left:expr $(, $value_stack:expr)*]) => {
-        toq!([$($operator_stack),*] [$left & $right $(, $value_stack)*])
-    };
-
-    ([|, $($operator_stack:tt),*] [$right:expr, $left:expr $(, $value_stack:expr)*]) => {
-        toq!([$($operator_stack),*] [$left | $right $(, $value_stack)*])
-    };
 
     ([] [ $value:expr ]) => {
         $value
@@ -111,7 +124,7 @@ macro_rules! toq {
     // Start rule
 
     ($($tokens:tt)*) => {
-        toq!([] [] $($tokens)*)
+        toq!([begin] [] $($tokens)* end)
     };
 }
 

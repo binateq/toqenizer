@@ -1,4 +1,4 @@
-//#![recursion_limit = "8"]
+#![recursion_limit = "16"]
 //#![feature(trace_macros)]
 
 use std::ops::{BitAnd, BitOr, Shr, Range};
