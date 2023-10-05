@@ -313,13 +313,24 @@ mod parse_string_should {
     }
 
     #[test]
-    fn parse_macro_with_expression() {
+    fn parse_macro_at_with_expression() {
         let mut stream = StringCharStream::new("1234.abcd");
         let regex = toq!(@{|c| c != '.'}+);
 
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 
         assert_eq!(Ok("1234".to_string()), actual);
+        assert_eq!(Some('.'), stream.peek());
+    }
+
+    #[test]
+    fn parse_macro_arrow_with_expression() {
+        let mut stream = StringCharStream::new("1234.abcd");
+        let regex = toq!(@is_ascii_digit+ => {|s| s.chars().rev().collect()});
+
+        let actual = string_parse(&regex, &mut stream, &HashMap::new());
+
+        assert_eq!(Ok("4321".to_string()), actual);
         assert_eq!(Some('.'), stream.peek());
     }
 }

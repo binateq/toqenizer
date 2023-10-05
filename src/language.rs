@@ -18,6 +18,14 @@ macro_rules! toq {
         toq!([$($operator_stack)*] [$last.rep($min..$max) $(, $value_stack)*] $($rest)*)
     };
 
+    ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] => $string:literal $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [$last.replace($string) $(, $value_stack)*] $($rest)*)
+    };
+
+    ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] => { $mapper:expr } $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [$last.map($mapper) $(, $value_stack)*] $($rest)*)
+    };
+
     // Keywords
 
     ([begin $($operator_stack:tt)*] [$($value_stack:expr)*] end $($rest:tt)*) => {
@@ -190,5 +198,10 @@ mod regex_should {
     #[test]
     fn parse_curly_brackets() {
         assert_eq!(Element::Repeat(Box::new(Element::String("foo")), 3..5), toq!("foo"{3,5}));
+    }
+
+    #[test]
+    fn parse_arrow() {
+        assert_eq!(Element::Replace(Box::new(Element::Char('a')), "b"), toq!('a' => "b"));
     }
 }
