@@ -6,24 +6,66 @@ macro_rules! toq {
         toq!([ $($operator_stack)* ] [$last.opt() $(, $value_stack)*] $($rest)*)
     };
 
+    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+        compile_error!(concat!(
+            "No operand for unary '?'. Rest tokens: ",
+            stringify!($($rest)*)
+        ))
+    };
+
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] * $($rest:tt)*) => {
         toq!([$($operator_stack)*] [$last.rep0() $(, $value_stack)*] $($rest)*)
+    };
+
+    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+        compile_error!(concat!(
+            "No operand for unary '*'. Rest tokens: ",
+            stringify!($($rest)*)
+        ))
     };
 
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] + $($rest:tt)*) => {
         toq!([$($operator_stack)*] [$last.rep1() $(, $value_stack)*] $($rest)*)
     };
 
+    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+        compile_error!(concat!(
+            "No operand for unary '+'. Rest tokens: ",
+            stringify!($($rest)*)
+        ))
+    };
+
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] { $min:literal , $max:literal } $($rest:tt)*) => {
         toq!([$($operator_stack)*] [$last.rep($min..$max) $(, $value_stack)*] $($rest)*)
+    };
+
+    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+        compile_error!(concat!(
+            "No operand for unary '{min, max}'. Rest tokens: ",
+            stringify!($($rest)*)
+        ))
     };
 
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] => $string:literal $($rest:tt)*) => {
         toq!([$($operator_stack)*] [$last.replace($string) $(, $value_stack)*] $($rest)*)
     };
 
+    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+        compile_error!(concat!(
+            "No operand for unary '=> \"string\"'. Rest tokens: ",
+            stringify!($($rest)*)
+        ))
+    };
+
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] => { $mapper:expr } $($rest:tt)*) => {
         toq!([$($operator_stack)*] [$last.map($mapper) $(, $value_stack)*] $($rest)*)
+    };
+
+    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+        compile_error!(concat!(
+            "No operand for unary '=> { expr }'. Rest tokens: ",
+            stringify!($($rest)*)
+        ))
     };
 
     // Keywords
@@ -34,7 +76,7 @@ macro_rules! toq {
 
     ([$($operator_stack:tt)*] [$($value_stack:expr)*] end $($rest:tt)*) => {
         compile_error!(concat!(
-            "Unpair close parentheses ')'. Rest tokens: ",
+            "Unpair close parenthesis ')'. Rest tokens: ",
             stringify!($($rest)*)
         ))
     };
@@ -45,6 +87,14 @@ macro_rules! toq {
 
     ([| $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] end $($rest:tt)*) => {
         toq!([$($operator_stack),*] [$left | $right $(, $value_stack)*] end $($rest)*)
+    };
+
+    ([$($operator_stack:tt)*] [$($value_stack:expr)*] skip $($rest:tt)*) => {
+        toq!([skip $($operator_stack)*] [$($value_stack)*] $($rest)*)
+    };
+
+    ([$($operator_stack:tt)*] [$($value_stack:expr)*] case insensitive $($rest:tt)*) => {
+        toq!([case insensitive $($operator_stack)*] [$($value_stack)*] $($rest)*)
     };
 
     // Reduce AND (&) when two primitives on value stack
@@ -64,6 +114,16 @@ macro_rules! toq {
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr),*] @ { $predicate:expr } $($rest:tt)*) => {
         toq!([& $($operator_stack)*] [crate::Element::Predicate($predicate), $left & $right $(, $value_stack)*] $($rest)*)
     };
+
+    // Reduce SKIP
+
+    ([skip $($operator_stack:tt)*] [$last:expr $(, $value_stack:expr),*] $constant:literal $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [$last & crate::Elem::elem($constant).skip() $(, $value_stack)*] $($rest)*)
+    }; 
+
+    ([skip $($operator_stack:tt)*] [] $constant:literal $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [crate::Elem::elem($constant).skip()] $($rest)*)
+    }; 
 
     // Push AND (&) when begin on operator stack
 
@@ -203,5 +263,28 @@ mod regex_should {
     #[test]
     fn parse_arrow() {
         assert_eq!(Element::Replace(Box::new(Element::Char('a')), "b"), toq!('a' => "b"));
+    }
+
+    #[test]
+    fn parse_skip_in_middle() {
+        assert_eq!(
+            Element::And(
+                Box::new(Element::And(
+                    Box::new(Element::Char('a')),
+                    Box::new(Element::Skip(Box::new(Element::Char('b'))))
+                )),
+                Box::new(Element::Char('c'))
+            ),
+            toq!('a' skip 'b' 'c'));
+    }
+
+    #[test]
+    fn parse_skip_in_begin() {
+        assert_eq!(
+            Element::And(
+                Box::new(Element::Skip(Box::new(Element::Char('b')))),
+                Box::new(Element::Char('c'))
+            ),
+            toq!(skip 'b' 'c'));
     }
 }
