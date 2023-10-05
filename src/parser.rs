@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Range;
-use super::{Predicate, Element, ParseError, Error, Parser, StringMapper};
+use super::{Regex, ParseError, Error, Parser};
 use super::stream::CharStream;
 
 pub trait NfaParser<'a, Token> {
@@ -10,7 +10,7 @@ pub trait NfaParser<'a, Token> {
 impl<'a, Token> NfaParser<'a, Token> for Parser<'a, Token> {
     fn parse(&self, stream: &mut dyn CharStream) -> Result<Token, ParseError> {
         for rule in &self.rules {
-            if let Ok(string) = string_parse(rule.builder, stream, &self.dictionary) {
+            if let Ok(string) = string_parse(&rule.builder, stream, &self.dictionary) {
                 return Ok((rule.mapper)(string))
             }
         }
@@ -63,7 +63,7 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn parse_predicate(&mut self, predicate: &Predicate) -> Result<(), ParseError> {
+    fn parse_predicate(&mut self, predicate: &fn(char) -> bool) -> Result<(), ParseError> {
         if let Some(next_char) = self.stream.peek() {
             if predicate(next_char) {
                 self.store(next_char);
@@ -105,7 +105,7 @@ impl<'a> ParserState<'a> {
         Ok(())
     }
 
-    fn parse_repeat(&mut self, element: &Element, range: &Range<u32>, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+    fn parse_repeat(&mut self, element: &Regex, range: &Range<u32>, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         if range.is_empty() {
             return Ok(());
         }
@@ -132,7 +132,7 @@ impl<'a> ParserState<'a> {
         Ok(())
     }
 
-    fn parse_and(&mut self, element1: &Element, element2: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+    fn parse_and(&mut self, element1: &Regex, element2: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let buffer_length = self.buffer.len();
         self.stream.store_state();
     
@@ -151,7 +151,7 @@ impl<'a> ParserState<'a> {
         Ok(())
     }
 
-    fn parse_or(&mut self, element1: &Element, element2: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+    fn parse_or(&mut self, element1: &Regex, element2: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let buffer_length = self.buffer.len();
         self.stream.store_state();
     
@@ -176,7 +176,7 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn parse_by_name(&mut self, name: &str, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+    fn parse_by_name(&mut self, name: &str, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         if let Some(element) = dictionary.get(name) {
             self.parse(element, dictionary)
         } else {
@@ -184,7 +184,7 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn parse_skip(&mut self, element: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+    fn parse_skip(&mut self, element: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let tmp = self.skip_flag;
         self.skip_flag = true;
 
@@ -194,7 +194,7 @@ impl<'a> ParserState<'a> {
         result
     }
 
-    fn parse_case_insensitive(&mut self, element: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+    fn parse_case_insensitive(&mut self, element: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let tmp = self.case_insensitive_flag;
         self.case_insensitive_flag = true;
 
@@ -204,7 +204,7 @@ impl<'a> ParserState<'a> {
         result
     }
 
-    fn parse_replace(&mut self, element: &Element, string: &str, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+    fn parse_replace(&mut self, element: &Regex, string: &str, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let tmp = self.buffer.clone();
         self.buffer = String::new();
 
@@ -218,7 +218,7 @@ impl<'a> ParserState<'a> {
         result
     }
 
-    fn parse_map(&mut self, element: &Element, mapper: &StringMapper, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+    fn parse_map(&mut self, element: &Regex, mapper: &fn(String) -> String, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let tmp = self.buffer.clone();
         self.buffer = String::new();
 
@@ -233,25 +233,25 @@ impl<'a> ParserState<'a> {
         result
     }
 
-    fn parse(&mut self, element: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+    fn parse(&mut self, element: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         match element {
-            Element::Char(char) => self.parse_char(*char),
-            Element::Predicate(predicate) => self.parse_predicate(predicate),
-            Element::String(string) => self.parse_string(*string),
-            Element::Repeat(element, range) => self.parse_repeat(element, range, dictionary),
-            Element::And(element1, element2) => self.parse_and(element1, element2, dictionary),
-            Element::Or(element1, element2) => self.parse_or(element1, element2, dictionary),
-            Element::Eof => self.parse_eof(),
-            Element::Reference(name) => self.parse_by_name(*name, dictionary),
-            Element::Skip(element) => self.parse_skip(element, dictionary),
-            Element::CaseInsensitive(element) => self.parse_case_insensitive(element, dictionary),
-            Element::Replace(element, string) => self.parse_replace(element, string, dictionary),
-            Element::Map(element, mapper) => self.parse_map(element, mapper, dictionary),
+            Regex::Char(char) => self.parse_char(*char),
+            Regex::Predicate(predicate) => self.parse_predicate(predicate),
+            Regex::String(string) => self.parse_string(*string),
+            Regex::Repeat(element, range) => self.parse_repeat(element, range, dictionary),
+            Regex::And(element1, element2) => self.parse_and(element1, element2, dictionary),
+            Regex::Or(element1, element2) => self.parse_or(element1, element2, dictionary),
+            Regex::Eof => self.parse_eof(),
+            Regex::Reference(name) => self.parse_by_name(*name, dictionary),
+            Regex::Skip(element) => self.parse_skip(element, dictionary),
+            Regex::CaseInsensitive(element) => self.parse_case_insensitive(element, dictionary),
+            Regex::Replace(element, string) => self.parse_replace(element, string, dictionary),
+            Regex::Map(element, mapper) => self.parse_map(element, mapper, dictionary),
         }
     }
 }
 
-fn string_parse(element: &Element, stream: &mut dyn CharStream, dictionary: &HashMap<&str, Element>) -> Result<String, ParseError> {
+fn string_parse(element: &Regex, stream: &mut dyn CharStream, dictionary: &HashMap<&str, Regex>) -> Result<String, ParseError> {
     let mut state = ParserState {
         buffer: String::new(),
         stream,
@@ -263,16 +263,16 @@ fn string_parse(element: &Element, stream: &mut dyn CharStream, dictionary: &Has
 }
 
 #[cfg(test)]
-mod parse_string_should {
+mod string_parse_should {
     use std::collections::HashMap;
     use super::string_parse;
-    use super::super::{Elem, Element, p, eof, toq};
+    use super::super::{ToRegex, Regex, eof, regex};
     use super::super::stream::{CharStream, StringCharStream};
 
     #[test]
-    fn parse_abc_when_regex_is_abc_eof() {
+    fn parse_sequence_and_eof() {
         let mut stream = StringCharStream::new("abc");
-        let regex = 'a'.elem() & 'b'.elem() & 'c'.elem() & eof;
+        let regex = 'a'.to_regex() & 'b'.to_regex() & 'c'.to_regex() & eof;
 
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 
@@ -280,9 +280,9 @@ mod parse_string_should {
     }
 
     #[test]
-    fn parse_digits() {
+    fn parse_predicate() {
         let mut stream = StringCharStream::new("1234567.89");
-        let regex = p(|c: char| c.is_digit(10)).rep1();
+        let regex = Regex::Predicate(|c: char| c.is_digit(10)).rep1();
 
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 
@@ -291,9 +291,9 @@ mod parse_string_should {
     }
 
     #[test]
-    fn parse_macro_with_is_ascii_digit() {
+    fn parse_macro_with_method_predicate() {
         let mut stream = StringCharStream::new("1234abcd");
-        let regex = toq!(@is_ascii_digit+);
+        let regex = regex!(@is_ascii_digit+);
 
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 
@@ -302,20 +302,9 @@ mod parse_string_should {
     }
 
     #[test]
-    fn parse_predicate() {
+    fn parse_macro_with_expression_predicate() {
         let mut stream = StringCharStream::new("1234.abcd");
-        let regex = Element::Predicate(|c| c != '.').rep1();
-
-        let actual = string_parse(&regex, &mut stream, &HashMap::new());
-
-        assert_eq!(Ok("1234".to_string()), actual);
-        assert_eq!(Some('.'), stream.peek());
-    }
-
-    #[test]
-    fn parse_macro_at_with_expression() {
-        let mut stream = StringCharStream::new("1234.abcd");
-        let regex = toq!(@{|c| c != '.'}+);
+        let regex = regex!(@{|c| c != '.'}+);
 
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 
@@ -326,7 +315,7 @@ mod parse_string_should {
     #[test]
     fn parse_macro_arrow_with_expression() {
         let mut stream = StringCharStream::new("1234.abcd");
-        let regex = toq!(@is_ascii_digit+ => {|s| s.chars().rev().collect()});
+        let regex = regex!(@is_ascii_digit+ => {|s| s.chars().rev().collect()});
 
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 

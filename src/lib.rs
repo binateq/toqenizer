@@ -4,67 +4,70 @@
 use std::collections::HashMap;
 use std::ops::{BitAnd, BitOr, Range};
 
-type Predicate = fn(char) -> bool;
-type StringMapper = fn(String) -> String;
-
 #[derive(Debug, PartialEq, Clone)]
-pub enum Element<'a> {
+pub enum Regex<'a> {
     Char(char),
-    Predicate(Predicate),
+    Predicate(fn(char) -> bool),
     String(&'a str),
-    Skip(Box<Element<'a>>),
-    CaseInsensitive(Box<Element<'a>>),
-    Replace(Box<Element<'a>>, &'a str),
-    Map(Box<Element<'a>>, StringMapper),
-    Repeat(Box<Element<'a>>, Range<u32>),
-    And(Box<Element<'a>>, Box<Element<'a>>),
-    Or(Box<Element<'a>>, Box<Element<'a>>),
+    Skip(Box<Regex<'a>>),
+    CaseInsensitive(Box<Regex<'a>>),
+    Replace(Box<Regex<'a>>, &'a str),
+    Map(Box<Regex<'a>>, fn(String) -> String),
+    Repeat(Box<Regex<'a>>, Range<u32>),
+    And(Box<Regex<'a>>, Box<Regex<'a>>),
+    Or(Box<Regex<'a>>, Box<Regex<'a>>),
     Reference(&'a str),
     Eof
 }
 
-pub trait Elem<'a> {
-    fn elem(self) -> Element<'a>;
+pub trait ToRegex<'a> {
+    fn to_regex(self) -> Regex<'a>;
 }
 
-impl<'a> Elem<'a> for char {
-    fn elem(self) -> Element<'a> {
-        Element::Char(self)
+impl<'a> ToRegex<'a> for char {
+    fn to_regex(self) -> Regex<'a> {
+        Regex::Char(self)
     }
 }
 
-impl<'a> Elem<'a> for &'a str {
-    fn elem(self) -> Element<'a> {
-        Element::String(self)
+impl<'a> ToRegex<'a> for &'a str {
+    fn to_regex(self) -> Regex<'a> {
+        Regex::String(self)
+    }
+}
+
+impl<'a> ToRegex<'_> for fn(char) -> bool {
+    fn to_regex(self) -> Regex<'static> {
+        Regex::Predicate(self)
     }
 }
 
 #[cfg(test)]
-mod elem_should {
-    use super::{Element, Elem};
+mod to_regex_should {
+    use super::{Regex, ToRegex};
 
     #[test]
-    fn make_char_element() {
-        assert_eq!(Element::Char('a'), 'a'.elem());
+    fn make_char_regex() {
+        assert_eq!(Regex::Char('a'), 'a'.to_regex());
     }
 
     #[test]
-    fn make_string_element() {
-        assert_eq!(Element::String("foo"), "foo".elem());
+    fn make_string_regex() {
+        assert_eq!(Regex::String("foo"), "foo".to_regex());
+    }
+
+    fn is_digit(c: char) -> bool { c.is_ascii_digit() }
+
+    #[test]
+    fn make_predicate_regex() {
+        let actual = (is_digit as fn (char) -> bool).to_regex();
+        assert_eq!(Regex::Predicate(is_digit), actual);
     }
 }
 
-pub fn p(predicate: Predicate) -> Element<'static> {
-    Element::Predicate(predicate)
-}
-
-pub fn r<'a>(identifier: &'a str) -> Element<'a> {
-    Element::Reference(identifier)
-}
-
-impl<'a> Element<'a> {
+impl<'a> Regex<'a> {
     pub fn rep(self, range: Range<u32>) -> Self {
-        Element::Repeat(Box::new(self), range)
+        Regex::Repeat(Box::new(self), range)
     }
 
     pub fn rep0(self) -> Self {
@@ -80,32 +83,32 @@ impl<'a> Element<'a> {
     }
 
     pub fn skip(self) -> Self {
-        Element::Skip(Box::new(self))
+        Regex::Skip(Box::new(self))
     }
 
     pub fn ci(self) -> Self {
-        Element::CaseInsensitive(Box::new(self))
+        Regex::CaseInsensitive(Box::new(self))
     }
 
     pub fn replace(self, literal: &'a str) -> Self {
-        Element::Replace(Box::new(self), literal)
+        Regex::Replace(Box::new(self), literal)
     }
 
-    pub fn map(self, mapper: StringMapper) -> Self {
-        Element::Map(Box::new(self), mapper)
+    pub fn map(self, mapper: fn(String) -> String) -> Self {
+        Regex::Map(Box::new(self), mapper)
     }
 }
 
 #[cfg(test)]
 mod regex_should {
-    use super::{Element, Elem};
+    use super::{Regex, ToRegex};
 
     #[test]
     fn make_repeat_3_4_when_rep_min_is_3_and_max_is_4() {
-        let actual = "abc".elem().rep(3..4);
+        let actual = "abc".to_regex().rep(3..4);
         let expected =
-        Element::Repeat(
-            Box::new(Element::String("abc")),
+        Regex::Repeat(
+            Box::new(Regex::String("abc")),
             3..4);
 
         assert_eq!(expected, actual);
@@ -114,10 +117,10 @@ mod regex_should {
     
     #[test]
     fn make_repeat_4_3_when_rep_min_is_4_and_max_is_3() {
-        let actual = "abc".elem().rep(4..3);
+        let actual = "abc".to_regex().rep(4..3);
         let expected =
-        Element::Repeat(
-            Box::new(Element::String("abc")),
+        Regex::Repeat(
+            Box::new(Regex::String("abc")),
             4..3);
 
         assert_eq!(expected, actual);
@@ -125,68 +128,68 @@ mod regex_should {
 
     #[test]
     fn make_repeat_0_1_when_opt() {
-        let actual = 'a'.elem().opt();
+        let actual = 'a'.to_regex().opt();
         let expected =
-        Element::Repeat(
-            Box::new(Element::Char('a')),
+        Regex::Repeat(
+            Box::new(Regex::Char('a')),
             0..1);
 
         assert_eq!(expected, actual);
     }
 }
 
-impl<'a> BitAnd<Element<'a>> for Element<'a> {
-    type Output = Element<'a>;
+impl<'a> BitAnd<Regex<'a>> for Regex<'a> {
+    type Output = Regex<'a>;
 
-    fn bitand(self, rhs: Element<'a>) -> Element<'a> {
-        Element::And(Box::new(self), Box::new(rhs))
+    fn bitand(self, rhs: Regex<'a>) -> Regex<'a> {
+        Regex::And(Box::new(self), Box::new(rhs))
     }
 }
 
 #[cfg(test)]
 mod regex_and_should {
-    use super::{Elem, Element};
+    use super::{ToRegex, Regex};
 
     #[test]
     fn make_and_char_a_char_b_char_c () {
-        let actual ='a'.elem() & 'b'.elem() & 'c'.elem();
+        let actual ='a'.to_regex() & 'b'.to_regex() & 'c'.to_regex();
         let expected =
-        Element::And(
-            Box::new(Element::And(
-                Box::new(Element::Char('a')), 
-                Box::new(Element::Char('b')))), 
-            Box::new(Element::Char('c')));
+        Regex::And(
+            Box::new(Regex::And(
+                Box::new(Regex::Char('a')), 
+                Box::new(Regex::Char('b')))), 
+            Box::new(Regex::Char('c')));
 
         assert_eq!(expected, actual);
     }
 }
 
-impl<'a> BitOr<Element<'a>> for Element<'a> {
-    type Output = Element<'a>;
+impl<'a> BitOr<Regex<'a>> for Regex<'a> {
+    type Output = Regex<'a>;
 
-    fn bitor(self, rhs: Element<'a>) -> Element<'a> {
-        Element::Or(Box::new(self), Box::new(rhs))
+    fn bitor(self, rhs: Regex<'a>) -> Regex<'a> {
+        Regex::Or(Box::new(self), Box::new(rhs))
     }
 }
 
 #[cfg(test)]
 mod regex_or_should {
-    use super::{Elem, Element};
+    use super::{ToRegex, Regex};
 
     #[test]
     fn make_or_char_a_char_b () {
-        let actual ='a'.elem() | 'b'.elem();
+        let actual ='a'.to_regex() | 'b'.to_regex();
         let expected =
-        Element::Or(
-            Box::new(Element::Char('a')),
-            Box::new(Element::Char('b')));
+        Regex::Or(
+            Box::new(Regex::Char('a')),
+            Box::new(Regex::Char('b')));
 
         assert_eq!(expected, actual);
     }
 }
 
 #[allow(non_upper_case_globals)]
-pub const eof: Element = Element::Eof;
+pub const eof: Regex = Regex::Eof;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Position {
@@ -257,16 +260,15 @@ pub struct ParseError {
     position: Position
 }
 
-pub type Mapper<Token> = fn(String) -> Token;
 
 #[derive(Debug, PartialEq)]
 pub struct Rule<'a, Token> {
-    builder: &'a Element<'a>,
-    mapper: Mapper<Token>
+    builder: Regex<'a>,
+    mapper: fn(String) -> Token
 }
 
 pub struct Parser<'a, Token> {
-    dictionary: HashMap<&'a str, Element<'a>>,
+    dictionary: HashMap<&'a str, Regex<'a>>,
     rules: Vec<Rule<'a, Token>>
 }
 
