@@ -273,5 +273,5 @@ pub struct Parser<'a, Token> {
 }
 
 pub mod stream;
-pub mod parser;
+pub mod nfa;
 pub mod language;
