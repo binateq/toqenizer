@@ -125,6 +125,16 @@ macro_rules! toq {
         toq!([$($operator_stack)*] [crate::Elem::elem($constant).skip()] $($rest)*)
     }; 
 
+    // Reduce CASE INSENSITIVE
+
+    ([case insensitive $($operator_stack:tt)*] [$last:expr $(, $value_stack:expr),*] $constant:literal $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [$last & crate::Elem::elem($constant).ci() $(, $value_stack)*] $($rest)*)
+    }; 
+
+    ([case insensitive $($operator_stack:tt)*] [] $constant:literal $($rest:tt)*) => {
+        toq!([$($operator_stack)*] [crate::Elem::elem($constant).ci()] $($rest)*)
+    }; 
+
     // Push AND (&) when begin on operator stack
 
     ([begin $($operator_stack:tt)*] [$($value_stack:expr),+] $constant:literal $($rest:tt)*) => {
@@ -286,5 +296,28 @@ mod regex_should {
                 Box::new(Element::Char('c'))
             ),
             toq!(skip 'b' 'c'));
+    }
+
+    #[test]
+    fn parse_case_insensitive_in_middle() {
+        assert_eq!(
+            Element::And(
+                Box::new(Element::And(
+                    Box::new(Element::Char('a')),
+                    Box::new(Element::CaseInsensitive(Box::new(Element::Char('b'))))
+                )),
+                Box::new(Element::Char('c'))
+            ),
+            toq!('a' case insensitive 'b' 'c'));
+    }
+
+    #[test]
+    fn parse_case_insensitive_in_begin() {
+        assert_eq!(
+            Element::And(
+                Box::new(Element::CaseInsensitive(Box::new(Element::Char('b')))),
+                Box::new(Element::Char('c'))
+            ),
+            toq!(case insensitive 'b' 'c'));
     }
 }
