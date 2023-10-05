@@ -1,23 +1,26 @@
 #![recursion_limit = "16"]
 //#![feature(trace_macros)]
 
-use std::ops::{BitAnd, BitOr, Shr, Range};
+use std::collections::HashMap;
+use std::ops::{BitAnd, BitOr, Range};
 
 type Predicate = fn(char) -> bool;
+type StringMapper = fn(String) -> String;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Element<'a> {
     Char(char),
     Predicate(Predicate),
     String(&'a str),
+    Skip(Box<Element<'a>>),
+    CaseInsensitive(Box<Element<'a>>),
+    Replace(Box<Element<'a>>, &'a str),
+    Map(Box<Element<'a>>, StringMapper),
     Repeat(Box<Element<'a>>, Range<u32>),
     And(Box<Element<'a>>, Box<Element<'a>>),
     Or(Box<Element<'a>>, Box<Element<'a>>),
-    Eof,
-    Reference(&'a str)
-    // TODO: Skip
-    // TODO: Case Insensitive
-    // TODO: Convert strings like \x0A to '\n' or \u0041 to 'A'
+    Reference(&'a str),
+    Eof
 }
 
 pub trait Elem<'a> {
@@ -51,13 +54,6 @@ mod elem_should {
     }
 }
 
-// TODO: Try to implement Tok for Predicate. Now I get the compiler error when I'm using tok().
-// impl<'a> Tok<'a> for Predicate {
-//     fn tok(self) -> TokenBuilder<'a> {
-//         TokenBuilder::Predicate(self)
-//     }
-// }
-
 pub fn p(predicate: Predicate) -> Element<'static> {
     Element::Predicate(predicate)
 }
@@ -81,6 +77,22 @@ impl<'a> Element<'a> {
 
     pub fn opt(self) -> Self {
         self.rep(0..1)
+    }
+
+    pub fn skip(self) -> Self {
+        Element::Skip(Box::new(self))
+    }
+
+    pub fn ci(self) -> Self {
+        Element::CaseInsensitive(Box::new(self))
+    }
+
+    pub fn replace(self, literal: &'a str) -> Self {
+        Element::Replace(Box::new(self), literal)
+    }
+
+    pub fn map(self, mapper: StringMapper) -> Self {
+        Element::Map(Box::new(self), mapper)
     }
 }
 
@@ -235,7 +247,8 @@ pub enum Error {
     UnexpectedEof,
     ExpectEof,
     ExpectChar,
-    UnrecognizedChar
+    UnrecognizedToken,
+    UnknownName
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -247,94 +260,14 @@ pub struct ParseError {
 pub type Mapper<Token> = fn(String) -> Token;
 
 #[derive(Debug, PartialEq)]
-pub struct Tokenizer<'a, Token> {
-    builder: Element<'a>,
+pub struct Rule<'a, Token> {
+    builder: &'a Element<'a>,
     mapper: Mapper<Token>
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Rule<'a, Token> {
-    Single(Tokenizer<'a, Token>),
-    Multiple(Vec<Tokenizer<'a, Token>>)
-}
-
-impl<'a, Token> Shr<Mapper<Token>> for Element<'a> {
-    type Output = Rule<'a, Token>;
-    
-    fn shr(self, rhs: Mapper<Token>) -> Self::Output {
-        Rule::Single(Tokenizer {
-            builder: self,
-            mapper: rhs
-        })
-    }
-}
-
-impl<'a, Token> BitOr<Rule<'a, Token>> for Rule<'a, Token> {
-    type Output = Rule<'a, Token>;
-
-    fn bitor(self, rhs: Rule<'a, Token>) -> Rule<'a, Token> {
-        match (self, rhs) {
-            (Rule::Single(tokenizer1), Rule::Single(tokenizer2)) =>
-                Rule::Multiple(vec![tokenizer1, tokenizer2]),
-            (Rule::Single(tokenizer1), Rule::Multiple(tokenizers2)) => {
-                let mut result = vec![tokenizer1];
-                result.extend(tokenizers2);
-                
-                Rule::Multiple(result)
-            },
-            (Rule::Multiple(mut tokenizers1), Rule::Single(tokenizer2)) => {
-                tokenizers1.push(tokenizer2);
-
-                Rule::Multiple(tokenizers1)
-            },
-            (Rule::Multiple(mut tokenizers1), Rule::Multiple(tokenizers2)) => {
-                tokenizers1.extend(tokenizers2);
-
-                Rule::Multiple(tokenizers1)
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tokenizer_should {
-    use super::{p, Rule, Tokenizer};
-
-    #[derive(Debug, PartialEq)]
-    enum Token {
-        Identifier(String),
-        Integer(u32)
-    }
-
-    fn make_identifier(name: String) -> Token {
-        Token::Identifier(name)
-    }
-
-    fn make_integer(value: String) -> Token {
-        Token::Integer(u32::from_str_radix(&value, 10).unwrap())
-    }
-
-    #[test]
-    fn make_multiple_rules() {
-        let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
-        let integer = p(|c| c.is_digit(10)).rep1();
-
-        let actual
-            = identifier.clone() >> make_identifier
-            | integer.clone() >> make_integer;
-        let expected = Rule::Multiple(vec![
-            Tokenizer {
-                builder: identifier,
-                mapper: make_identifier
-            },
-            Tokenizer {
-                builder: integer,
-                mapper: make_integer
-            }
-        ]);
-
-        assert_eq!(expected, actual);
-    }
+pub struct Parser<'a, Token> {
+    dictionary: HashMap<&'a str, Element<'a>>,
+    rules: Vec<Rule<'a, Token>>
 }
 
 pub mod stream;

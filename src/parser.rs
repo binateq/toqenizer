@@ -1,297 +1,325 @@
+use std::collections::HashMap;
 use std::ops::Range;
-use super::{Predicate, Element, ParseError, Error, Tokenizer, Rule};
+use super::{Predicate, Element, ParseError, Error, Parser, StringMapper};
 use super::stream::CharStream;
 
-fn parse_char(char: char, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
-    if let Some(next_char) = stream.peek() {
-        if char == next_char {
-            buffer.push(next_char);
-            stream.next();
+pub trait NfaParser<'a, Token> {
+    fn parse(&self, stream: &mut dyn CharStream) -> Result<Token, ParseError>;
+}
 
-            Ok(())
-        } else {
-            Err(ParseError{ error: Error::ExpectChar, position: stream.position() })
+impl<'a, Token> NfaParser<'a, Token> for Parser<'a, Token> {
+    fn parse(&self, stream: &mut dyn CharStream) -> Result<Token, ParseError> {
+        for rule in &self.rules {
+            if let Ok(string) = string_parse(rule.builder, stream, &self.dictionary) {
+                return Ok((rule.mapper)(string))
+            }
         }
-    } else {
-        Err(ParseError{ error: Error::UnexpectedEof, position: stream.position() })
+
+        Err(ParseError { error: Error::UnrecognizedToken, position: stream.position() })
     }
 }
 
-fn parse_predicate(predicate: &Predicate, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
-    if let Some(next_char) = stream.peek() {
-        if predicate(next_char) {
-            buffer.push(next_char);
-            stream.next();
-
-            Ok(())
-        } else {
-            Err(ParseError{ error: Error::ExpectChar, position: stream.position() })
-        }
-    } else {
-        Err(ParseError{ error: Error::UnexpectedEof, position: stream.position() })
-    }
+struct ParserState<'a> {
+    buffer: String,
+    stream: &'a mut dyn CharStream,
+    skip_flag: bool,
+    case_insensitive_flag: bool,
 }
 
-fn parse_string(string: &str, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
-    let buffer_length = buffer.len();
-    stream.store_state();
+impl<'a> ParserState<'a> {
+    fn error(&self, error: Error) -> Result<(), ParseError> {
+        Err(ParseError {
+            error,
+            position: self.stream.position()
+        })
+    }
 
-    for char in string.chars() {
-        if let Some(next_char) = stream.peek() {
-            if char == next_char {
-                buffer.push(next_char);
-                stream.next();
+    fn eq_char(&self, c1: char, c2: char) -> bool {
+        if self.case_insensitive_flag {
+            c1.eq_ignore_ascii_case(&c2)
+        } else {
+            c1.eq(&c2)
+        }
+    }
+
+    fn store(&mut self, c: char) {
+        if !self.skip_flag {
+            self.buffer.push(c)
+        }
+    }
+
+    fn parse_char(&mut self, c: char) -> Result<(), ParseError> {
+        if let Some(next_char) = self.stream.peek() {
+            if self.eq_char(c, next_char) {
+                self.store(next_char);
+                self.stream.next();
+    
+                Ok(())
             } else {
-                buffer.truncate(buffer_length);
-                stream.restore_state();
-                
-                return Err(ParseError{ error: Error::ExpectChar, position: stream.position() });
+                self.error(Error::ExpectChar)
             }
         } else {
-            buffer.truncate(buffer_length);
-            stream.restore_state();
-            
-            return Err(ParseError{ error: Error::UnexpectedEof, position: stream.position() });
+            self.error(Error::UnexpectedEof)
         }
     }
 
-    stream.discard_state();
-    Ok(())
-}
-
-fn parse_repeat(element: &Element, range: &Range<u32>, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
-    if range.is_empty() {
-        return Ok(());
-    }
+    fn parse_predicate(&mut self, predicate: &Predicate) -> Result<(), ParseError> {
+        if let Some(next_char) = self.stream.peek() {
+            if predicate(next_char) {
+                self.store(next_char);
+                self.stream.next();
     
-    let buffer_length = buffer.len();
-    stream.store_state();
-
-    for _ in 0..range.start {
-        if let Err(parse_error) = parse_into_buffer(buffer, &element, stream) {
-            buffer.truncate(buffer_length);
-            stream.restore_state();
-
-            return Err(parse_error);
+                Ok(())
+            } else {
+                self.error(Error::ExpectChar)
+            }
+        } else {
+            self.error(Error::UnexpectedEof)
         }
     }
 
-    for _ in range.start..range.end {
-        if let Err(_) = parse_into_buffer(buffer, &element, stream) {
-            break;
-        }
-    }
-
-    stream.discard_state();
-    Ok(())
-}
-
-fn parse_and(element1: &Element, element2: &Element, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
-    let buffer_length = buffer.len();
-    stream.store_state();
-
-    if let Err(error) = parse_into_buffer(buffer, element1, stream) {
-        return Err(error);
-    }
-
-    if let Err(error) = parse_into_buffer(buffer, element2, stream) {
-        buffer.truncate(buffer_length);
-        stream.restore_state();
-
-        return Err(error);
-    }
-
-    stream.discard_state();
-    Ok(())
-}
-
-fn parse_or(element1: &Element, element2: &Element, buffer: &mut String, stream: &mut dyn CharStream) -> Result<(), ParseError> {
-    let buffer_length = buffer.len();
-    stream.store_state();
-
-    if let Err(_) = parse_into_buffer(buffer, element1, stream) {
-        if let Err(parse_error) = parse_into_buffer(buffer, element2, stream) {
-            buffer.truncate(buffer_length);
-            stream.restore_state();
+    fn parse_string(&mut self, string: &str) -> Result<(), ParseError> {
+        let buffer_length = self.buffer.len();
+        self.stream.store_state();
     
-            return Err(parse_error);
+        for c in string.chars() {
+            if let Some(next_char) = self.stream.peek() {
+                if self.eq_char(c, next_char) {
+                    self.store(next_char);
+                    self.stream.next();
+                } else {
+                    self.buffer.truncate(buffer_length);
+                    self.stream.restore_state();
+                    
+                    return self.error(Error::ExpectChar);
+                }
+            } else {
+                self.buffer.truncate(buffer_length);
+                self.stream.restore_state();
+                
+                return self.error(Error::UnexpectedEof);
+            }
         }
-    }
-
-    stream.discard_state();
-    Ok(())
-}
-
-fn parse_eof(stream: &mut dyn CharStream) -> Result<(), ParseError> {
-    if stream.peek().is_none() {
+    
+        self.stream.discard_state();
         Ok(())
-    } else {
-        Err(ParseError{ error: Error::ExpectEof, position: stream.position() })
     }
-}
 
-fn parse_into_buffer(buffer: &mut String, element: &Element, stream: &mut dyn CharStream) -> Result<(), ParseError> {
-    match element {
-        Element::Char(char) => parse_char(*char, buffer, stream),
-        Element::Predicate(predicate) => parse_predicate(predicate, buffer, stream),
-        Element::String(string) => parse_string(*string, buffer, stream),
-        Element::Repeat(element, range) => parse_repeat(element.as_ref(), range, buffer, stream),
-        Element::And(element1, element2) => parse_and(element1, element2, buffer, stream),
-        Element::Or(element1, element2) => parse_or(element1.as_ref(), element2.as_ref(), buffer, stream),
-        Element::Eof => parse_eof(stream),
-        Element::Reference(_identifier) => Ok(()),
-    }
-}
-
-pub fn parse_element(element: &Element, stream: &mut dyn CharStream) -> Result<String, ParseError> {
-    let mut buffer = String::new();
+    fn parse_repeat(&mut self, element: &Element, range: &Range<u32>, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+        if range.is_empty() {
+            return Ok(());
+        }
+        
+        let buffer_length = self.buffer.len();
+        self.stream.store_state();
     
-    if let Err(parse_error) = parse_into_buffer(&mut buffer, element, stream) {
-        Err(parse_error)
-    } else {
-        Ok(buffer)
+        for _ in 0..range.start {
+            if let Err(parse_error) = self.parse(&element, dictionary) {
+                self.buffer.truncate(buffer_length);
+                self.stream.restore_state();
+    
+                return Err(parse_error);
+            }
+        }
+    
+        for _ in range.start..range.end {
+            if let Err(_) = self.parse(&element, dictionary) {
+                break;
+            }
+        }
+    
+        self.stream.discard_state();
+        Ok(())
     }
+
+    fn parse_and(&mut self, element1: &Element, element2: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+        let buffer_length = self.buffer.len();
+        self.stream.store_state();
+    
+        if let Err(error) = self.parse(element1, dictionary) {
+            return Err(error);
+        }
+    
+        if let Err(error) = self.parse(element2, dictionary) {
+            self.buffer.truncate(buffer_length);
+            self.stream.restore_state();
+    
+            return Err(error);
+        }
+    
+        self.stream.discard_state();
+        Ok(())
+    }
+
+    fn parse_or(&mut self, element1: &Element, element2: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+        let buffer_length = self.buffer.len();
+        self.stream.store_state();
+    
+        if let Err(_) = self.parse(element1, dictionary) {
+            if let Err(parse_error) = self.parse(element2, dictionary) {
+                self.buffer.truncate(buffer_length);
+                self.stream.restore_state();
+        
+                return Err(parse_error);
+            }
+        }
+    
+        self.stream.discard_state();
+        Ok(())
+    }
+
+    fn parse_eof(&mut self) -> Result<(), ParseError> {
+        if self.stream.peek().is_none() {
+            Ok(())
+        } else {
+            self.error(Error::ExpectEof)
+        }
+    }
+
+    fn parse_by_name(&mut self, name: &str, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+        if let Some(element) = dictionary.get(name) {
+            self.parse(element, dictionary)
+        } else {
+            self.error(Error::UnknownName)
+        }
+    }
+
+    fn parse_skip(&mut self, element: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+        let tmp = self.skip_flag;
+        self.skip_flag = true;
+
+        let result = self.parse(element, dictionary);
+        self.skip_flag = tmp;
+
+        result
+    }
+
+    fn parse_case_insensitive(&mut self, element: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+        let tmp = self.case_insensitive_flag;
+        self.case_insensitive_flag = true;
+
+        let result = self.parse(element, dictionary);
+        self.case_insensitive_flag = tmp;
+
+        result
+    }
+
+    fn parse_replace(&mut self, element: &Element, string: &str, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+        let tmp = self.buffer.clone();
+        self.buffer = String::new();
+
+        let result = self.parse(element, dictionary);
+        self.buffer = tmp;
+
+        if result.is_ok() {
+            self.buffer.push_str(string);
+        }
+
+        result
+    }
+
+    fn parse_map(&mut self, element: &Element, mapper: &StringMapper, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+        let tmp = self.buffer.clone();
+        self.buffer = String::new();
+
+        let result = self.parse(element, dictionary);
+        let new_buffer = self.buffer.clone();
+        self.buffer = tmp;
+
+        if result.is_ok() {
+            self.buffer.push_str(&mapper(new_buffer));
+        }
+
+        result
+    }
+
+    fn parse(&mut self, element: &Element, dictionary: &HashMap<&str, Element>) -> Result<(), ParseError> {
+        match element {
+            Element::Char(char) => self.parse_char(*char),
+            Element::Predicate(predicate) => self.parse_predicate(predicate),
+            Element::String(string) => self.parse_string(*string),
+            Element::Repeat(element, range) => self.parse_repeat(element, range, dictionary),
+            Element::And(element1, element2) => self.parse_and(element1, element2, dictionary),
+            Element::Or(element1, element2) => self.parse_or(element1, element2, dictionary),
+            Element::Eof => self.parse_eof(),
+            Element::Reference(name) => self.parse_by_name(*name, dictionary),
+            Element::Skip(element) => self.parse_skip(element, dictionary),
+            Element::CaseInsensitive(element) => self.parse_case_insensitive(element, dictionary),
+            Element::Replace(element, string) => self.parse_replace(element, string, dictionary),
+            Element::Map(element, mapper) => self.parse_map(element, mapper, dictionary),
+        }
+    }
+}
+
+fn string_parse(element: &Element, stream: &mut dyn CharStream, dictionary: &HashMap<&str, Element>) -> Result<String, ParseError> {
+    let mut state = ParserState {
+        buffer: String::new(),
+        stream,
+        skip_flag: false,
+        case_insensitive_flag: false,
+    };
+
+    state.parse(element, dictionary).map(|_| state.buffer)
 }
 
 #[cfg(test)]
-mod parse_element_should {
-    use super::parse_element;
+mod parse_string_should {
+    use std::collections::HashMap;
+    use super::string_parse;
     use super::super::{Elem, Element, p, eof, toq};
     use super::super::stream::{CharStream, StringCharStream};
-
 
     #[test]
     fn parse_abc_when_regex_is_abc_eof() {
         let mut stream = StringCharStream::new("abc");
         let regex = 'a'.elem() & 'b'.elem() & 'c'.elem() & eof;
 
-        assert_eq!(Ok("abc".to_string()), parse_element(&regex, &mut stream));
+        let actual = string_parse(&regex, &mut stream, &HashMap::new());
+
+        assert_eq!(Ok("abc".to_string()), actual);
     }
 
     #[test]
     fn parse_digits() {
         let mut stream = StringCharStream::new("1234567.89");
-        let digits1 = p(|c: char| c.is_digit(10)).rep1();
+        let regex = p(|c: char| c.is_digit(10)).rep1();
 
-        assert_eq!(Ok("1234567".to_string()), parse_element(&digits1, &mut stream));
+        let actual = string_parse(&regex, &mut stream, &HashMap::new());
+
+        assert_eq!(Ok("1234567".to_string()), actual);
         assert_eq!(Some('.'), stream.peek());
     }
 
     #[test]
     fn parse_macro_with_is_ascii_digit() {
         let mut stream = StringCharStream::new("1234abcd");
-        let digits1 = toq!(@is_ascii_digit+);
+        let regex = toq!(@is_ascii_digit+);
 
-        assert_eq!(Ok("1234".to_string()), parse_element(&digits1, &mut stream));
+        let actual = string_parse(&regex, &mut stream, &HashMap::new());
+
+        assert_eq!(Ok("1234".to_string()), actual);
         assert_eq!(Some('a'), stream.peek());
     }
 
     #[test]
     fn parse_predicate() {
         let mut stream = StringCharStream::new("1234.abcd");
-        let not_dot = Element::Predicate(|c| c != '.').rep1();
+        let regex = Element::Predicate(|c| c != '.').rep1();
 
-        assert_eq!(Ok("1234".to_string()), parse_element(&not_dot, &mut stream));
+        let actual = string_parse(&regex, &mut stream, &HashMap::new());
+
+        assert_eq!(Ok("1234".to_string()), actual);
         assert_eq!(Some('.'), stream.peek());
     }
 
     #[test]
     fn parse_macro_with_expression() {
         let mut stream = StringCharStream::new("1234.abcd");
-        let not_dot = toq!(@{|c| c != '.'}+);
+        let regex = toq!(@{|c| c != '.'}+);
 
-        assert_eq!(Ok("1234".to_string()), parse_element(&not_dot, &mut stream));
+        let actual = string_parse(&regex, &mut stream, &HashMap::new());
+
+        assert_eq!(Ok("1234".to_string()), actual);
         assert_eq!(Some('.'), stream.peek());
-    }
-}
-
-fn parse_tokenizer<'a, Token>(tokenizer: &Tokenizer<'a, Token>, stream: &mut dyn CharStream) -> Result<Token, ParseError> {
-    parse_element(&tokenizer.builder, stream).map(tokenizer.mapper)
-}
-
-fn parse_tokenizers<'a, Token>(tokenizers: &Vec<Tokenizer<'a, Token>>, stream: &mut dyn CharStream) -> Result<Token, ParseError> {
-    for tokenizer in tokenizers {
-        let result = parse_tokenizer(tokenizer, stream);
-
-        if result.is_ok() {
-            return result;
-        }
-    }
-
-    Err(ParseError{ error: Error::UnrecognizedChar, position: stream.position() })
-}
-
-pub fn parse_rule<'a, Token>(rule: &Rule<'a, Token>, stream: &mut dyn CharStream) -> Result<Token, ParseError> {
-    match rule {
-        Rule::Single(tokenizer) => parse_tokenizer(&tokenizer, stream),
-        Rule::Multiple(tokenizers) => parse_tokenizers(&tokenizers, stream)
-    }
-}
-
-#[cfg(test)]
-mod parse_rule_should {
-    use super::parse_rule;
-    use super::super::{p, ParseError, Error, Position};
-    use super::super::stream::StringCharStream;
-
-    #[derive(Debug, PartialEq)]
-    enum Token {
-        Identifier(String),
-        Integer(u32)
-    }
-
-    fn make_identifier(name: String) -> Token {
-        Token::Identifier(name)
-    }
-
-    fn make_integer(value: String) -> Token {
-        Token::Integer(u32::from_str_radix(&value, 10).unwrap())
-    }
-
-    #[test]
-    fn recognize_identifer() {
-        let mut stream = StringCharStream::new("abc");
-        let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
-        let integer = p(|c| c.is_digit(10)).rep1();
-
-        let rule
-            = identifier.clone() >> make_identifier
-            | integer.clone() >> make_integer;
-
-        let actual = parse_rule(&rule, &mut stream);
-        let expected = Ok(Token::Identifier("abc".to_string()));
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn recognize_integer() {
-        let mut stream = StringCharStream::new("123");
-        let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
-        let integer = p(|c| c.is_digit(10)).rep1();
-
-        let rule
-            = identifier.clone() >> make_identifier
-            | integer.clone() >> make_integer;
-
-        let actual = parse_rule(&rule, &mut stream);
-        let expected = Ok(Token::Integer(123));
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn do_not_recognize_plus_sign() {
-        let mut stream = StringCharStream::new("+123");
-        let identifier = p(|c| c.is_alphabetic()) & p(|c| c.is_alphanumeric()).rep0();
-        let integer = p(|c| c.is_digit(10)).rep1();
-
-        let rule
-            = identifier >> make_identifier
-            | integer >> make_integer;
-
-        let actual = parse_rule(&rule, &mut stream);
-
-        assert_eq!(Err(ParseError { error: Error::UnrecognizedChar, position: Position { line: 1, column: 1 }}), actual);
     }
 }
