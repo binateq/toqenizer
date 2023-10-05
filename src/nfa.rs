@@ -105,7 +105,7 @@ impl<'a> ParserState<'a> {
         Ok(())
     }
 
-    fn parse_repeat(&mut self, element: &Regex, range: &Range<u32>, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
+    fn parse_repeat(&mut self, regex: &Regex, range: &Range<u32>, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         if range.is_empty() {
             return Ok(());
         }
@@ -114,7 +114,7 @@ impl<'a> ParserState<'a> {
         self.stream.store_state();
     
         for _ in 0..range.start {
-            if let Err(parse_error) = self.parse(&element, dictionary) {
+            if let Err(parse_error) = self.parse(&regex, dictionary) {
                 self.buffer.truncate(buffer_length);
                 self.stream.restore_state();
     
@@ -123,7 +123,7 @@ impl<'a> ParserState<'a> {
         }
     
         for _ in range.start..range.end {
-            if let Err(_) = self.parse(&element, dictionary) {
+            if let Err(_) = self.parse(&regex, dictionary) {
                 break;
             }
         }
@@ -132,15 +132,15 @@ impl<'a> ParserState<'a> {
         Ok(())
     }
 
-    fn parse_and(&mut self, element1: &Regex, element2: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
+    fn parse_and(&mut self, regex1: &Regex, regex2: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let buffer_length = self.buffer.len();
         self.stream.store_state();
     
-        if let Err(error) = self.parse(element1, dictionary) {
+        if let Err(error) = self.parse(regex1, dictionary) {
             return Err(error);
         }
     
-        if let Err(error) = self.parse(element2, dictionary) {
+        if let Err(error) = self.parse(regex2, dictionary) {
             self.buffer.truncate(buffer_length);
             self.stream.restore_state();
     
@@ -151,12 +151,12 @@ impl<'a> ParserState<'a> {
         Ok(())
     }
 
-    fn parse_or(&mut self, element1: &Regex, element2: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
+    fn parse_or(&mut self, regex1: &Regex, regex2: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let buffer_length = self.buffer.len();
         self.stream.store_state();
     
-        if let Err(_) = self.parse(element1, dictionary) {
-            if let Err(parse_error) = self.parse(element2, dictionary) {
+        if let Err(_) = self.parse(regex1, dictionary) {
+            if let Err(parse_error) = self.parse(regex2, dictionary) {
                 self.buffer.truncate(buffer_length);
                 self.stream.restore_state();
         
@@ -184,31 +184,31 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn parse_skip(&mut self, element: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
+    fn parse_skip(&mut self, regex: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let tmp = self.skip_flag;
         self.skip_flag = true;
 
-        let result = self.parse(element, dictionary);
+        let result = self.parse(regex, dictionary);
         self.skip_flag = tmp;
 
         result
     }
 
-    fn parse_case_insensitive(&mut self, element: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
+    fn parse_case_insensitive(&mut self, regex: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let tmp = self.case_insensitive_flag;
         self.case_insensitive_flag = true;
 
-        let result = self.parse(element, dictionary);
+        let result = self.parse(regex, dictionary);
         self.case_insensitive_flag = tmp;
 
         result
     }
 
-    fn parse_replace(&mut self, element: &Regex, string: &str, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
+    fn parse_replace(&mut self, regex: &Regex, string: &str, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let tmp = self.buffer.clone();
         self.buffer = String::new();
 
-        let result = self.parse(element, dictionary);
+        let result = self.parse(regex, dictionary);
         self.buffer = tmp;
 
         if result.is_ok() {
@@ -218,11 +218,11 @@ impl<'a> ParserState<'a> {
         result
     }
 
-    fn parse_map(&mut self, element: &Regex, mapper: &fn(String) -> String, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
+    fn parse_map(&mut self, regex: &Regex, mapper: &fn(String) -> String, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let tmp = self.buffer.clone();
         self.buffer = String::new();
 
-        let result = self.parse(element, dictionary);
+        let result = self.parse(regex, dictionary);
         let new_buffer = self.buffer.clone();
         self.buffer = tmp;
 
@@ -233,8 +233,8 @@ impl<'a> ParserState<'a> {
         result
     }
 
-    fn parse(&mut self, element: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
-        match element {
+    fn parse(&mut self, regex: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
+        match regex {
             Regex::Char(char) => self.parse_char(*char),
             Regex::Predicate(predicate) => self.parse_predicate(predicate),
             Regex::String(string) => self.parse_string(*string),
@@ -251,7 +251,7 @@ impl<'a> ParserState<'a> {
     }
 }
 
-fn string_parse(element: &Regex, stream: &mut dyn CharStream, dictionary: &HashMap<&str, Regex>) -> Result<String, ParseError> {
+fn string_parse(regex: &Regex, stream: &mut dyn CharStream, dictionary: &HashMap<&str, Regex>) -> Result<String, ParseError> {
     let mut state = ParserState {
         buffer: String::new(),
         stream,
@@ -259,7 +259,7 @@ fn string_parse(element: &Regex, stream: &mut dyn CharStream, dictionary: &HashM
         case_insensitive_flag: false,
     };
 
-    state.parse(element, dictionary).map(|_| state.buffer)
+    state.parse(regex, dictionary).map(|_| state.buffer)
 }
 
 #[cfg(test)]
