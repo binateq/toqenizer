@@ -2,6 +2,7 @@
 macro_rules! regex {
     // Postfix unary operators
 
+    // ?
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] ? $($rest:tt)*) => {
         regex!([ $($operator_stack)* ] [$last.opt() $(, $value_stack)*] $($rest)*)
     };
@@ -13,63 +14,76 @@ macro_rules! regex {
         ))
     };
 
+    // *
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] * $($rest:tt)*) => {
         regex!([$($operator_stack)*] [$last.rep0() $(, $value_stack)*] $($rest)*)
     };
 
-    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+    ([$($operator_stack:tt)*] [] * $($rest:tt)*) => {
         compile_error!(concat!(
             "No operand for unary '*'. Rest tokens: ",
             stringify!($($rest)*)
         ))
     };
 
+    // +
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] + $($rest:tt)*) => {
         regex!([$($operator_stack)*] [$last.rep1() $(, $value_stack)*] $($rest)*)
     };
 
-    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+    ([$($operator_stack:tt)*] [] + $($rest:tt)*) => {
         compile_error!(concat!(
             "No operand for unary '+'. Rest tokens: ",
             stringify!($($rest)*)
         ))
     };
 
+    // {min, max}
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] { $min:literal , $max:literal } $($rest:tt)*) => {
         regex!([$($operator_stack)*] [$last.rep($min..$max) $(, $value_stack)*] $($rest)*)
     };
 
-    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+    ([$($operator_stack:tt)*] [] { $min:literal , $max:literal } $($rest:tt)*) => {
         compile_error!(concat!(
             "No operand for unary '{min, max}'. Rest tokens: ",
             stringify!($($rest)*)
         ))
     };
 
+    // =>
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] => $string:literal $($rest:tt)*) => {
         regex!([$($operator_stack)*] [$last.replace($string) $(, $value_stack)*] $($rest)*)
     };
 
-    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+    ([$($operator_stack:tt)*] [] => $string:literal $($rest:tt)*) => {
         compile_error!(concat!(
             "No operand for unary '=> \"string\"'. Rest tokens: ",
             stringify!($($rest)*)
         ))
     };
 
+    // => { }
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] => { $mapper:expr } $($rest:tt)*) => {
         regex!([$($operator_stack)*] [$last.map($mapper) $(, $value_stack)*] $($rest)*)
     };
 
-    ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
+    ([$($operator_stack:tt)*] [] { $mapper:expr } $($rest:tt)*) => {
         compile_error!(concat!(
             "No operand for unary '=> { expr }'. Rest tokens: ",
             stringify!($($rest)*)
         ))
     };
 
+    ([$($operator_stack:tt)*] [$($value_stack:expr)*] => $($rest:tt)*) => {
+        compile_error!(concat!(
+            "Unrecognied right operand for '=>'. Should be string or curly-closed expression. Rest tokens: ",
+            stringify!($($rest)*)
+        ))
+    };
+
     // Keywords
 
+    // end
     ([begin $($operator_stack:tt)*] [$($value_stack:expr)*] end $($rest:tt)*) => {
         regex!([$($operator_stack)*] [$($value_stack)*] $($rest)*)
     };
@@ -89,15 +103,17 @@ macro_rules! regex {
         regex!([$($operator_stack),*] [$left | $right $(, $value_stack)*] end $($rest)*)
     };
 
+    // skip
     ([$($operator_stack:tt)*] [$($value_stack:expr)*] skip $($rest:tt)*) => {
         regex!([skip $($operator_stack)*] [$($value_stack)*] $($rest)*)
     };
 
+    // case insensitive
     ([$($operator_stack:tt)*] [$($value_stack:expr)*] case insensitive $($rest:tt)*) => {
         regex!([case insensitive $($operator_stack)*] [$($value_stack)*] $($rest)*)
     };
 
-    // Reduce AND (&) when two primitives on value stack
+    // Reduce 'and' (&) when two primitives on value stack
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] $constant:literal $($rest:tt)*) => {
         regex!([& $($operator_stack)*] [crate::ToRegex::to_regex($constant), $left & $right $(, $value_stack)*] $($rest)*)
@@ -115,7 +131,7 @@ macro_rules! regex {
         regex!([& $($operator_stack)*] [crate::Regex::Predicate($predicate), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
-    // Reduce SKIP
+    // Reduce 'skip'
 
     ([skip $($operator_stack:tt)*] [$last:expr $(, $value_stack:expr),*] $constant:literal $($rest:tt)*) => {
         regex!([$($operator_stack)*] [$last & crate::ToRegex::to_regex($constant).skip() $(, $value_stack)*] $($rest)*)
@@ -125,7 +141,7 @@ macro_rules! regex {
         regex!([$($operator_stack)*] [crate::ToRegex::to_regex($constant).skip()] $($rest)*)
     }; 
 
-    // Reduce CASE INSENSITIVE
+    // Reduce 'case insensitive'
 
     ([case insensitive $($operator_stack:tt)*] [$last:expr $(, $value_stack:expr),*] $constant:literal $($rest:tt)*) => {
         regex!([$($operator_stack)*] [$last & crate::ToRegex::to_regex($constant).ci() $(, $value_stack)*] $($rest)*)
@@ -135,7 +151,7 @@ macro_rules! regex {
         regex!([$($operator_stack)*] [crate::ToRegex::to_regex($constant).ci()] $($rest)*)
     }; 
 
-    // Push AND (&) when begin on operator stack
+    // Push 'and' (&) when begin on operator stack
 
     ([begin $($operator_stack:tt)*] [$($value_stack:expr),+] $constant:literal $($rest:tt)*) => {
         regex!([& begin $($operator_stack)*] [crate::ToRegex::to_regex($constant) $(, $value_stack)+] $($rest)*)
@@ -153,7 +169,7 @@ macro_rules! regex {
         regex!([& begin $($operator_stack)*] [crate::Regex::Predicate($predicate) $(, $value_stack)+] $($rest)*)
     };
 
-    // Reduce OR (|) when AND/OR on operator stack
+    // Reduce 'or' (|) when 'and'/'or' on operator stack
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] | $($rest:tt)*) => {
         regex!([| $($operator_stack)*] [$left & $right $(, $value_stack)*] $($rest)*)
@@ -163,7 +179,7 @@ macro_rules! regex {
         regex!([| $($operator_stack)*] [$left | $right $(, $value_stack)*] $($rest)*)
     };
 
-    // Push OR (|) when no AND/OR on operator stack
+    // Push 'or' (|) when no 'and'/'or' on operator stack
 
     ([$($operator_stack:tt)*] [$($value_stack:expr),*] | $($rest:tt)*) => {
         regex!([| $($operator_stack)*] [$($value_stack),*] $($rest)*)
