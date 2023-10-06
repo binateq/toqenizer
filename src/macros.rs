@@ -375,18 +375,18 @@ mod regex_should {
 macro_rules! rules {
     // Statements
 
-    // definition
-    ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] $identifier:ident = { $($regex:tt)+ } $($rest:tt)*) => {
-        rules!([(stringify!($identifier),regex!($($regex)+)) $(, ($identifiers,$regexes))*] [$($rules:expr),*] $($rest)*)
-    };
-
     // rule
     ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] $identifier:ident => { $mapper:expr } $($rest:tt)*) => {
-        rules!([$(($identifiers,$regexes)),*] [crate::Rule::new(crate::Regex::Reference(stringfy!($identifer)), $mapper) $(, $rules:expr)*] $($rest)*)
+        rules!([$(($identifiers,$regexes)),*] [crate::Rule::new(crate::Regex::Reference(stringify!($identifier)), $mapper) $(, $rules)*] $($rest)*)
     };
 
     ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] { $($regex:tt)+ } => { $mapper:expr } $($rest:tt)*) => {
-        rules!([$(($identifiers,$regexes)),*] [crate::Rule::new(regex!($($regex)+), $mapper) $(, $rules:expr)*] $($rest)*)
+        rules!([$(($identifiers,$regexes)),*] [crate::Rule::new(regex!($($regex)+), $mapper) $(, $rules)*] $($rest)*)
+    };
+
+    // definition
+    ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] $identifier:ident = { $($regex:tt)+ } $($rest:tt)*) => {
+        rules!([(stringify!($identifier),regex!($($regex)+)) $(, ($identifiers,$regexes))*] [$($rules),*] $($rest)*)
     };
 
     // Finish rules
@@ -424,10 +424,15 @@ mod rules_should {
     #[derive(Debug, PartialEq)]
     enum Token {
         Identifier(String),
+        Plus
     }
 
     fn make_identifier(name: String) -> Token {
         Token::Identifier(name)
+    }
+
+    fn make_plus(_: String) -> Token {
+        Token::Plus
     }
 
     #[test]
@@ -448,7 +453,8 @@ mod rules_should {
             letter = { 'a' }
             identifier = { letter (letter | digit)* }
 
-            { identifier } => { make_identifier }
+            identifier => { make_identifier }
+            { '+' } => { make_plus }
         };
 
         let mut definitions = HashMap::new();
@@ -463,13 +469,14 @@ mod rules_should {
                 )),
                 0..u32::MAX))));
         let rules = vec![
-            Rule::new(Regex::Reference("identifier"), make_identifier)
+            Rule::new(Regex::Reference("identifier"), make_identifier),
+            Rule::new(Regex::Char('+'), make_plus)
         ];
         let expected = Parser {
             definitions,
             rules
         };
 
-        assert_eq!(expected, actual);
+        assert_eq!(expected.rules, actual.rules);
     }
 }

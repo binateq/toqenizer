@@ -1,35 +1,33 @@
 # toqenizer
 
-Rust crate to making lexical analizers.
+Rust crate to make lexical analizers.
 
-## Syntax
+## Example
 
-```
-let digit = @is_ascii_digit;
-let letter = @is_ascii_letter;
-let spaces = skip @is_ascii_whitespace*; // just skips spaces from input
-let spaces1 = @{ |c| c == ' ' || c == '\t' }+;
+```rust
+enum Token {
+  Number(f64),
+  Identifier(String),
+  Add,
+  Sub,
+  Mul,
+  Div,
+}
 
-let hex = case insensitive ('0' | '1' | '2' | '3' | '4' | '5' | '6'
-    | '7' | '8' | '9' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F');
+let rules = rules! {
+  digit = { @is_ascii_digit }
+  letter = { @is_ascii_alphabetic }
+  number = { digit+ ('.' digit*)? }
+  identifier = { letter (digit | letter) }
 
-let identifier = '_' | letter ('_' | letter | digit)*;
-identifier: { |s| Token::Identifier s };
+  number => { |value| Token::Number(f64::from_str(&value).unwrap()) }
+  identifier => { |name| Token::Identifier(name) }
+  { '+' } => { |_| Token::Add }
+  { '-' } => { |_| Token::Sub }
+  { '*' } => { |_| Token::Mul }
+  { '/' } => { |_| Token::Div }
 
-digit+: { |s| Token::Integer u32::from_str(&s) }
-
-skip("0x") hex+: { |s| Token::Hexadecimal s } // hexadecimal digits without "0x" because of `skip`
-
-string = skip '"'
-         ( @{ |c| c != '"' && c != '\\' && c != '\n' && c != '\r' }
-         | "\\\\" => "\\"
-         | "\\\"" => "\""
-         | "\\n" => "\n"
-         | skip "\" digit{1, 3} => { |s|
-             char.from_u32_unchecked(u32::from_str_radix(&s, 10).unwrap())
-           }
-         )*
-         skip '"';
+};
 ```
 
 ## BNF of syntax
