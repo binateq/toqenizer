@@ -251,7 +251,7 @@ impl<'a> ParserState<'a> {
     }
 }
 
-fn string_parse(regex: &Regex, stream: &mut dyn CharStream, dictionary: &HashMap<&str, Regex>) -> Result<String, ParseError> {
+pub fn string_parse(regex: &Regex, stream: &mut dyn CharStream, dictionary: &HashMap<&str, Regex>) -> Result<String, ParseError> {
     let mut state = ParserState {
         buffer: String::new(),
         stream,
