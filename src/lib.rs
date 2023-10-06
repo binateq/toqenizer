@@ -1,4 +1,4 @@
-#![recursion_limit = "16"]
+#![recursion_limit = "32"]
 //#![feature(trace_macros)]
 
 use std::collections::HashMap;

@@ -354,90 +354,122 @@ mod regex_should {
             ),
             regex!(ci('b') 'c'));
     }
+
+    #[test]
+    fn parse_identifier() {
+        assert_eq!(
+            Regex::And(
+                Box::new(Regex::Reference("letter")),
+                Box::new(Regex::Repeat(Box::new(Regex::Or(
+                    Box::new(Regex::Reference("letter")),
+                    Box::new(Regex::Reference("digit"))
+                )),
+                0..u32::MAX))
+            ),
+            regex!(letter (letter | digit)*)
+        );
+    }
 }
 
-// #[macro_export]
-// macro_rules! rules {
-//     // Statements
+#[macro_export]
+macro_rules! rules {
+    // Statements
 
-//     // definition
-//     ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] let $identifier:ident = { $($regex:tt)+ } $($rest:tt)*) => {
-//         rules!([(stringify!($identifier),regex!($($regex)+)) $(, ($identifiers,$regexes))*] [$($rules:expr),*] $($rest)*)
-//     };
+    // definition
+    ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] $identifier:ident = { $($regex:tt)+ } $($rest:tt)*) => {
+        rules!([(stringify!($identifier),regex!($($regex)+)) $(, ($identifiers,$regexes))*] [$($rules:expr),*] $($rest)*)
+    };
 
-//     // rule
-//     ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] { $($regex:tt)+ } => { $mapper:expr } $($rest:tt)*) => {
-//         rules!([$(($identifiers,$regexes)),*] [crate::Rule::new(regex!($($regex)+), $mapper) $(, $rules:expr)*] $($rest)*)
-//     };
+    // rule
+    ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] $identifier:ident => { $mapper:expr } $($rest:tt)*) => {
+        rules!([$(($identifiers,$regexes)),*] [crate::Rule::new(crate::Regex::Reference(stringfy!($identifer)), $mapper) $(, $rules:expr)*] $($rest)*)
+    };
 
-//     // Finish rules
+    ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] { $($regex:tt)+ } => { $mapper:expr } $($rest:tt)*) => {
+        rules!([$(($identifiers,$regexes)),*] [crate::Rule::new(regex!($($regex)+), $mapper) $(, $rules:expr)*] $($rest)*)
+    };
 
-//     ([$(($identifiers:expr,$regexex:expr)),*] []) => {
-//         compile_error!("No rules found.")
-//     };
+    // Finish rules
 
-//     ([] [$($rules:expr),+]) => {
-//         crate::Parser {
-//             definitions: std::collections::HashMap::new(),
-//             rules: std::vec![$($rules),+]
-//         }
-//     };
+    ([$(($identifiers:expr,$regexex:expr)),*] []) => {
+        compile_error!("No rules found.")
+    };
 
-//     ([$(($identifiers:expr,$regexes:expr)),+] [$($rules:expr),+]) => {
-//         crate::Parser {
-//             definitions: [$(($identifiers,$regexes)),*].iter().collect(),
-//             rules: std::vec![$($rules),+]
-//         }
-//     };
+    ([] [$($rules:expr),+]) => {
+        crate::Parser {
+            definitions: std::collections::HashMap::new(),
+            rules: [$($rules),+].into_iter().rev().collect()
+        }
+    };
 
-//     // Start rule
+    ([$(($identifiers:expr,$regexes:expr)),+] [$($rules:expr),+]) => {
+        crate::Parser {
+            definitions: [$(($identifiers,$regexes)),+].into_iter().rev().collect(),
+            rules: [$($rules),+].into_iter().rev().collect()
+        }
+    };
 
-//     ($($tokens:tt)*) => {
-//         rules!([] [] $($tokens)*)
-//     };
-// }
+    // Start rule
 
-// #[cfg(test)]
-// mod rules_should {
-//     use std::collections::HashMap;
-//     use super::super::{Parser, Rule, Regex};
+    ($($tokens:tt)*) => {
+        rules!([] [] $($tokens)*)
+    };
+}
 
-//     #[derive(Debug, PartialEq)]
-//     enum Token {
-//         Integer(u32),
-//         Real(f64),
-//         String(String),
-//         Identifier(String),
-//         Open,
-//         Close,
-//         Plus,
-//         Asterisk,
-//         Minus,
-//         Slash 
-//     }
+#[cfg(test)]
+mod rules_should {
+    use std::collections::HashMap;
+    use super::super::{Parser, Rule, Regex};
 
-//     fn make_identifier(name: String) -> Token {
-//         Token::Identifier(name)
-//     }
+    #[derive(Debug, PartialEq)]
+    enum Token {
+        Identifier(String),
+    }
 
-//     #[test]
-//     fn make_single_rule() {
-//         let actual = rules!({'a'+ } => { make_identifier });
-//         let expected = Parser {
-//             definitions: HashMap::new(),
-//             rules: vec![Rule::new(Regex::Repeat(Box::new(Regex::Char('a')), 1..u32::MAX), make_identifier)]
-//         };
+    fn make_identifier(name: String) -> Token {
+        Token::Identifier(name)
+    }
 
-//         assert_eq!(expected, actual);
-//     }
+    #[test]
+    fn make_single_rule() {
+        let actual = rules!({'a'+ } => { make_identifier });
+        let expected = Parser {
+            definitions: HashMap::new(),
+            rules: vec![Rule::new(Regex::Repeat(Box::new(Regex::Char('a')), 1..u32::MAX), make_identifier)]
+        };
 
-//     fn make_definitions_and_rules() {
-//         let actual = rules! {
-//             let digit = { @is_ascii_digit }
-//             let letter = { @is_ascii_alphabetic }
-//             let identifer = { letter (letter | digit)* }
+        assert_eq!(expected, actual);
+    }
 
-//             { identifier } => { make_identifier }
-//         };
-//     }
-// }
+    #[test]
+    fn make_definitions_and_rules() {
+        let actual = rules! {
+            digit = { '1' }
+            letter = { 'a' }
+            identifier = { letter (letter | digit)* }
+
+            { identifier } => { make_identifier }
+        };
+
+        let mut definitions = HashMap::new();
+        definitions.insert("digit", Regex::Char('1'));
+        definitions.insert("letter", Regex::Char('a'));
+        definitions.insert("identifier", 
+            Regex::And(
+                Box::new(Regex::Reference("letter")),
+                Box::new(Regex::Repeat(Box::new(Regex::Or(
+                    Box::new(Regex::Reference("letter")),
+                    Box::new(Regex::Reference("digit"))
+                )),
+                0..u32::MAX))));
+        let rules = vec![
+            Rule::new(Regex::Reference("identifier"), make_identifier)
+        ];
+        let expected = Parser {
+            definitions,
+            rules
+        };
+
+        assert_eq!(expected, actual);
+    }
+}
