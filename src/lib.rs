@@ -263,12 +263,22 @@ pub struct ParseError {
 
 #[derive(Debug, PartialEq)]
 pub struct Rule<'a, Token> {
-    builder: Regex<'a>,
+    regex: Regex<'a>,
     mapper: fn(String) -> Token
 }
 
+impl<'a, Token> Rule<'a, Token> {
+    pub fn new(regex: Regex<'a>, mapper: fn(String) -> Token) -> Self {
+        Rule {
+            regex,
+            mapper
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Parser<'a, Token> {
-    dictionary: HashMap<&'a str, Regex<'a>>,
+    definitions: HashMap<&'a str, Regex<'a>>,
     rules: Vec<Rule<'a, Token>>
 }
 

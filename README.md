@@ -58,6 +58,6 @@ element = char // char in apostrophes like 'a' or '\n'
         | element "{" uint "," uint "}"
         | element "=>" string
         | element "=>" "{" Rust_expression "}"
-        | "skip" element
-        | "case" "insensitive" element
+        | "skip" "(" regexp ")"
+        | "ci" "(" regexp ")"
 ```

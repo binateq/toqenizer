@@ -10,7 +10,7 @@ pub trait NfaParser<'a, Token> {
 impl<'a, Token> NfaParser<'a, Token> for Parser<'a, Token> {
     fn parse(&self, stream: &mut dyn CharStream) -> Result<Token, ParseError> {
         for rule in &self.rules {
-            if let Ok(string) = string_parse(&rule.builder, stream, &self.dictionary) {
+            if let Ok(string) = string_parse(&rule.regex, stream, &self.definitions) {
                 return Ok((rule.mapper)(string))
             }
         }
