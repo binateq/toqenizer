@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::ops::Range;
 use super::{Regex, ParseError, Error, Parser};
-use super::stream::CharStream;
+use super::stream::{CharStream, CharStreamError};
 
 pub trait NfaParser<'a, Token> {
     fn parse(&self, stream: &mut dyn CharStream) -> Result<Token, ParseError>;
@@ -34,6 +34,14 @@ impl<'a> ParserState<'a> {
         })
     }
 
+    fn char_stream_error(&self, char_stream_error: &CharStreamError) -> Result<(), ParseError> {
+        match char_stream_error {
+            CharStreamError::Eof => self.error(Error::UnexpectedEof),
+            CharStreamError::IOError(io_error) => self.error(Error::IOError(*io_error)),
+            CharStreamError::NotUtf8 => self.error(Error::NotUtf8),
+        }
+    }
+
     fn eq_char(&self, c1: char, c2: char) -> bool {
         if self.case_insensitive_flag {
             c1.eq_ignore_ascii_case(&c2)
@@ -49,32 +57,34 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_char(&mut self, c: char) -> Result<(), ParseError> {
-        if let Some(next_char) = self.stream.peek() {
-            if self.eq_char(c, next_char) {
-                self.store(next_char);
-                self.stream.next();
-    
-                Ok(())
-            } else {
-                self.error(Error::ExpectChar)
-            }
-        } else {
-            self.error(Error::UnexpectedEof)
+        match self.stream.peek() {
+            Ok(next_char) => {
+                if self.eq_char(c, next_char) {
+                    self.store(next_char);
+                    self.stream.next();
+        
+                    Ok(())
+                } else {
+                    self.error(Error::ExpectChar)
+                }
+            },
+            Err(error) => self.char_stream_error(&error),
         }
     }
 
     fn parse_predicate(&mut self, predicate: &fn(char) -> bool) -> Result<(), ParseError> {
-        if let Some(next_char) = self.stream.peek() {
-            if predicate(next_char) {
-                self.store(next_char);
-                self.stream.next();
-    
-                Ok(())
-            } else {
-                self.error(Error::ExpectChar)
-            }
-        } else {
-            self.error(Error::UnexpectedEof)
+        match self.stream.peek() {
+            Ok(next_char) => {
+                if predicate(next_char) {
+                    self.store(next_char);
+                    self.stream.next();
+        
+                    Ok(())
+                } else {
+                    self.error(Error::ExpectChar)
+                }
+            },
+            Err(error) => self.char_stream_error(&error),
         }
     }
 
@@ -83,21 +93,24 @@ impl<'a> ParserState<'a> {
         self.stream.store_state();
     
         for c in string.chars() {
-            if let Some(next_char) = self.stream.peek() {
-                if self.eq_char(c, next_char) {
-                    self.store(next_char);
-                    self.stream.next();
-                } else {
+            match self.stream.peek() {
+                Ok(next_char) => {
+                    if self.eq_char(c, next_char) {
+                        self.store(next_char);
+                        self.stream.next();
+                    } else {
+                        self.buffer.truncate(buffer_length);
+                        self.stream.restore_state();
+                        
+                        return self.error(Error::ExpectChar);
+                    }
+                    },
+                Err(error) => {
                     self.buffer.truncate(buffer_length);
                     self.stream.restore_state();
                     
-                    return self.error(Error::ExpectChar);
-                }
-            } else {
-                self.buffer.truncate(buffer_length);
-                self.stream.restore_state();
-                
-                return self.error(Error::UnexpectedEof);
+                    return self.char_stream_error(&error);
+                },
             }
         }
     
@@ -169,10 +182,12 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_eof(&mut self) -> Result<(), ParseError> {
-        if self.stream.peek().is_none() {
-            Ok(())
-        } else {
-            self.error(Error::ExpectEof)
+        match self.stream.peek() {
+            Ok(_) => self.error(Error::ExpectEof),
+            Err(error) => match error {
+                CharStreamError::Eof => Ok(()),
+                error => self.char_stream_error(&error)
+            }
         }
     }
 
@@ -288,7 +303,7 @@ mod string_parse_should {
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 
         assert_eq!(Ok("1234567".to_string()), actual);
-        assert_eq!(Some('.'), stream.peek());
+        assert_eq!(Ok('.'), stream.peek());
     }
 
     #[test]
@@ -299,7 +314,7 @@ mod string_parse_should {
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 
         assert_eq!(Ok("1234".to_string()), actual);
-        assert_eq!(Some('a'), stream.peek());
+        assert_eq!(Ok('a'), stream.peek());
     }
 
     #[test]
@@ -310,7 +325,7 @@ mod string_parse_should {
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 
         assert_eq!(Ok("1234".to_string()), actual);
-        assert_eq!(Some('.'), stream.peek());
+        assert_eq!(Ok('.'), stream.peek());
     }
 
     #[test]
@@ -321,6 +336,6 @@ mod string_parse_should {
         let actual = string_parse(&regex, &mut stream, &HashMap::new());
 
         assert_eq!(Ok("4321".to_string()), actual);
-        assert_eq!(Some('.'), stream.peek());
+        assert_eq!(Ok('.'), stream.peek());
     }
 }

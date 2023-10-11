@@ -245,16 +245,18 @@ mod position_should {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Error {
     UnexpectedEof,
     ExpectEof,
     ExpectChar,
     UnrecognizedToken,
-    UnknownName
+    UnknownName,
+    NotUtf8,
+    IOError(std::io::ErrorKind)
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ParseError {
     error: Error,
     position: Position
