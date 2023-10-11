@@ -1,4 +1,4 @@
-#![recursion_limit = "32"]
+#![recursion_limit = "64"]
 //#![feature(trace_macros)]
 
 use std::collections::HashMap;
@@ -278,8 +278,8 @@ impl<'a, Token> Rule<'a, Token> {
 
 #[derive(Debug, PartialEq)]
 pub struct Parser<'a, Token> {
-    definitions: HashMap<&'a str, Regex<'a>>,
-    rules: Vec<Rule<'a, Token>>
+    pub definitions: HashMap<&'a str, Regex<'a>>,
+    pub rules: Vec<Rule<'a, Token>>
 }
 
 pub mod stream;

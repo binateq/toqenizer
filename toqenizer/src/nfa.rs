@@ -266,7 +266,8 @@ pub fn string_parse(regex: &Regex, stream: &mut dyn CharStream, dictionary: &Has
 mod string_parse_should {
     use std::collections::HashMap;
     use super::string_parse;
-    use super::super::{ToRegex, Regex, eof, regex};
+    use super::super::{ToRegex, Regex, eof};
+    use super::super::regex;
     use super::super::stream::{CharStream, StringCharStream};
 
     #[test]

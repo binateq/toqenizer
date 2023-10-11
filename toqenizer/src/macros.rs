@@ -4,7 +4,7 @@ macro_rules! regex {
 
     // ?
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] ? $($rest:tt)*) => {
-        regex!([ $($operator_stack)* ] [$last.opt() $(, $value_stack)*] $($rest)*)
+        $crate::regex!([ $($operator_stack)* ] [$last.opt() $(, $value_stack)*] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] ? $($rest:tt)*) => {
@@ -16,7 +16,7 @@ macro_rules! regex {
 
     // *
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] * $($rest:tt)*) => {
-        regex!([$($operator_stack)*] [$last.rep0() $(, $value_stack)*] $($rest)*)
+        $crate::regex!([$($operator_stack)*] [$last.rep0() $(, $value_stack)*] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] * $($rest:tt)*) => {
@@ -28,7 +28,7 @@ macro_rules! regex {
 
     // +
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] + $($rest:tt)*) => {
-        regex!([$($operator_stack)*] [$last.rep1() $(, $value_stack)*] $($rest)*)
+        $crate::regex!([$($operator_stack)*] [$last.rep1() $(, $value_stack)*] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] + $($rest:tt)*) => {
@@ -40,7 +40,7 @@ macro_rules! regex {
 
     // {min, max}
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] { $min:literal , $max:literal } $($rest:tt)*) => {
-        regex!([$($operator_stack)*] [$last.rep($min..$max) $(, $value_stack)*] $($rest)*)
+        $crate::regex!([$($operator_stack)*] [$last.rep($min..$max) $(, $value_stack)*] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] { $min:literal , $max:literal } $($rest:tt)*) => {
@@ -52,7 +52,7 @@ macro_rules! regex {
 
     // => "string"
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] => $string:literal $($rest:tt)*) => {
-        regex!([$($operator_stack)*] [$last.replace($string) $(, $value_stack)*] $($rest)*)
+        $crate::regex!([$($operator_stack)*] [$last.replace($string) $(, $value_stack)*] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] => $string:literal $($rest:tt)*) => {
@@ -64,7 +64,7 @@ macro_rules! regex {
 
     // => { }
     ([$($operator_stack:tt)*] [$last:expr $(, $value_stack:expr)*] => { $mapper:expr } $($rest:tt)*) => {
-        regex!([$($operator_stack)*] [$last.map($mapper) $(, $value_stack)*] $($rest)*)
+        $crate::regex!([$($operator_stack)*] [$last.map($mapper) $(, $value_stack)*] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] { $mapper:expr } $($rest:tt)*) => {
@@ -84,147 +84,147 @@ macro_rules! regex {
     // Reduce 'and' (&) when two primitives on value stack
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] $constant:literal $($rest:tt)*) => {
-        regex!([& $($operator_stack)*] [crate::ToRegex::to_regex($constant), $left & $right $(, $value_stack)*] $($rest)*)
+        $crate::regex!([& $($operator_stack)*] [$crate::ToRegex::to_regex($constant), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] @ $identifier:ident $($rest:tt)*) => {
-        regex!([& $($operator_stack)*] [crate::Regex::Predicate(|c| c.$identifier()), $left & $right $(, $value_stack)*] $($rest)*)
+        $crate::regex!([& $($operator_stack)*] [$crate::Regex::Predicate(|c| c.$identifier()), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr),*] @ { $predicate:expr } $($rest:tt)*) => {
-        regex!([& $($operator_stack)*] [crate::Regex::Predicate($predicate), $left & $right $(, $value_stack)*] $($rest)*)
+        $crate::regex!([& $($operator_stack)*] [$crate::Regex::Predicate($predicate), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr),*] ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([& $(operator_stack)*] [regex!($($regex)+), $left & $right $(, $value_stack)*] $($rest)*)
+        $crate::regex!([& $($operator_stack)*] [$crate::regex!($($regex)+), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr),*] skip ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([& $(operator_stack)*] [regex!($($regex)+).skip(), $left & $right $(, $value_stack)*] $($rest)*)
+        $crate::regex!([& $($operator_stack)*] [$crate::regex!($($regex)+).skip(), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr),*] ci ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([& $(operator_stack)*] [regex!($($regex)+).ci(), $left & $right $(, $value_stack)*] $($rest)*)
+        $crate::regex!([& $($operator_stack)*] [$crate::regex!($($regex)+).ci(), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] $identifier:ident $($rest:tt)*) => {
-        regex!([& $($operator_stack)*] [crate::Regex::Reference(stringify!($identifier)), $left & $right $(, $value_stack)*] $($rest)*)
+        $crate::regex!([& $($operator_stack)*] [$crate::Regex::Reference(stringify!($identifier)), $left & $right $(, $value_stack)*] $($rest)*)
     };
 
     // Reduce 'or' (|) when 'and'/'or' on operator stack
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] | $($rest:tt)*) => {
-        regex!([| $($operator_stack)*] [$left & $right $(, $value_stack)*] $($rest)*)
+        $crate::regex!([| $($operator_stack)*] [$left & $right $(, $value_stack)*] $($rest)*)
     };
 
     ([| $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*] | $($rest:tt)*) => {
-        regex!([| $($operator_stack)*] [$left | $right $(, $value_stack)*] $($rest)*)
+        $crate::regex!([| $($operator_stack)*] [$left | $right $(, $value_stack)*] $($rest)*)
     };
 
     // Push 'or' (|) when no 'and'/'or' on operator stack
 
     ([$($operator_stack:tt)*] [$($value_stack:expr),+] | $($rest:tt)*) => {
-        regex!([| $($operator_stack)*] [$($value_stack),+] $($rest)*)
+        $crate::regex!([| $($operator_stack)*] [$($value_stack),+] $($rest)*)
     };
 
     // Reduce 'or' (|) and 'and' (&) when no rest
 
     ([& $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*]) => {
-        regex!([$($operator_stack)*] [$left & $right $(, $value_stack)*])
+        $crate::regex!([$($operator_stack)*] [$left & $right $(, $value_stack)*])
     };
 
     ([| $($operator_stack:tt)*] [$right:expr, $left:expr $(, $value_stack:expr)*]) => {
-        regex!([$($operator_stack)*] [$left | $right $(, $value_stack)*])
+        $crate::regex!([$($operator_stack)*] [$left | $right $(, $value_stack)*])
     };
 
     // Push primitives to value stack when no other conditions
 
     ([$($operator_stack:tt)*] [] $constant:literal $($rest:tt)*) => {
-        regex!([$($operator_stack)*] [crate::ToRegex::to_regex($constant)] $($rest)*)
+        $crate::regex!([$($operator_stack)*] [$crate::ToRegex::to_regex($constant)] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] @ $identifier:ident $($rest:tt)*) => {
-        regex!([$($operator_stack),*] [crate::Regex::Predicate(|c| c.$identifier())] $($rest)*)
+        $crate::regex!([$($operator_stack),*] [$crate::Regex::Predicate(|c| c.$identifier())] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] @ { $predicate:expr } $($rest:tt)*) => {
-        regex!([$($operator_stack),*] [crate::Regex::Predicate($predicate)] $($rest)*)
+        $crate::regex!([$($operator_stack),*] [$crate::Regex::Predicate($predicate)] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([$($operator_stack),*] [regex!($($regex)+)] $($rest)*)
+        $crate::regex!([$($operator_stack),*] [$crate::regex!($($regex)+)] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] skip ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([$($operator_stack),*] [regex!($($regex)+).skip()] $($rest)*)
+        $crate::regex!([$($operator_stack),*] [$crate::regex!($($regex)+).skip()] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] ci ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([$($operator_stack),*] [regex!($($regex)+).ci()] $($rest)*)
+        $crate::regex!([$($operator_stack),*] [$crate::regex!($($regex)+).ci()] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [] $identifier:ident $($rest:tt)*) => {
-        regex!([$($operator_stack)*] [crate::Regex::Reference(stringify!($identifier))] $($rest)*)
+        $crate::regex!([$($operator_stack)*] [$crate::Regex::Reference(stringify!($identifier))] $($rest)*)
     };
 
     // Pass value to value stack when 'or' (|) on operator stack and single value on value stack
 
     ([| $($operator_stack:tt)*] [$value:expr] $constant:literal $($rest:tt)*) => {
-        regex!([| $($operator_stack)*] [crate::ToRegex::to_regex($constant), $value] $($rest)*)
+        $crate::regex!([| $($operator_stack)*] [$crate::ToRegex::to_regex($constant), $value] $($rest)*)
     };
 
     ([| $($operator_stack:tt)*] [$value:expr] @ $identifier:ident $($rest:tt)*) => {
-        regex!([| $($operator_stack),*] [crate::Regex::Predicate(|c| c.$identifier()), $value] $($rest)*)
+        $crate::regex!([| $($operator_stack),*] [$crate::Regex::Predicate(|c| c.$identifier()), $value] $($rest)*)
     };
 
     ([| $($operator_stack:tt)*] [$value:expr] @ { $predicate:expr } $($rest:tt)*) => {
-        regex!([| $($operator_stack),*] [crate::Regex::Predicate($predicate), $value] $($rest)*)
+        $crate::regex!([| $($operator_stack),*] [$crate::Regex::Predicate($predicate), $value] $($rest)*)
     };
 
     ([| $($operator_stack:tt)*] [$value:expr] ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([| $($operator_stack),*] [regex!($($regex)+), $value] $($rest)*)
+        $crate::regex!([| $($operator_stack),*] [$crate::regex!($($regex)+), $value] $($rest)*)
     };
 
     ([| $($operator_stack:tt)*] [$value:expr] skip ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([| $($operator_stack),*] [regex!($($regex)+).skip(), $value] $($rest)*)
+        $crate::regex!([| $($operator_stack),*] [$crate::regex!($($regex)+).skip(), $value] $($rest)*)
     };
 
     ([| $($operator_stack:tt)*] [$value:expr] ci ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([| $($operator_stack),*] [regex!($($regex)+).ci(), $value] $($rest)*)
+        $crate::regex!([| $($operator_stack),*] [$crate::regex!($($regex)+).ci(), $value] $($rest)*)
     };
 
     ([| $($operator_stack:tt)*] [$value:expr] $identifier:ident $($rest:tt)*) => {
-        regex!([| $($operator_stack)*] [crate::Regex::Reference(stringify!($identifier)), $value] $($rest)*)
+        $crate::regex!([| $($operator_stack)*] [$crate::Regex::Reference(stringify!($identifier)), $value] $($rest)*)
     };
 
     // Insert 'and' (&) to operator stack when single value on value stack
 
     ([$($operator_stack:tt)*] [$value:expr] $constant:literal $($rest:tt)*) => {
-        regex!([& $($operator_stack)*] [crate::ToRegex::to_regex($constant), $value] $($rest)*)
+        $crate::regex!([& $($operator_stack)*] [$crate::ToRegex::to_regex($constant), $value] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [$value:expr] @ $identifier:ident $($rest:tt)*) => {
-        regex!([& $($operator_stack),*] [crate::Regex::Predicate(|c| c.$identifier()), $value] $($rest)*)
+        $crate::regex!([& $($operator_stack),*] [$crate::Regex::Predicate(|c| c.$identifier()), $value] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [$value:expr] @ { $predicate:expr } $($rest:tt)*) => {
-        regex!([& $($operator_stack),*] [crate::Regex::Predicate($predicate), $value] $($rest)*)
+        $crate::regex!([& $($operator_stack),*] [$crate::Regex::Predicate($predicate), $value] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [$value:expr] ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([& $($operator_stack),*] [regex!($($regex)+), $value] $($rest)*)
+        $crate::regex!([& $($operator_stack),*] [$crate::regex!($($regex)+), $value] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [$value:expr] skip ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([& $($operator_stack),*] [regex!($($regex)+).skip(), $value] $($rest)*)
+        $crate::regex!([& $($operator_stack),*] [$crate::regex!($($regex)+).skip(), $value] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [$value:expr] ci ( $($regex:tt)+ ) $($rest:tt)*) => {
-        regex!([& $($operator_stack),*] [regex!($($regex)+).ci(), $value] $($rest)*)
+        $crate::regex!([& $($operator_stack),*] [$crate::regex!($($regex)+).ci(), $value] $($rest)*)
     };
 
     ([$($operator_stack:tt)*] [$value:expr] $identifier:ident $($rest:tt)*) => {
-        regex!([& $($operator_stack)*] [crate::Regex::Reference(stringify!($identifier)), $value] $($rest)*)
+        $crate::regex!([& $($operator_stack)*] [$crate::Regex::Reference(stringify!($identifier)), $value] $($rest)*)
     };
 
     // Final rules
@@ -236,14 +236,14 @@ macro_rules! regex {
     // Start rule
 
     ($($tokens:tt)*) => {
-        regex!([] [] $($tokens)*)
+        $crate::regex!([] [] $($tokens)*)
     };
 }
 
 
 #[cfg(test)]
 mod regex_should {
-    use super::super::Regex;
+    use super::super::{Regex, regex};
 
     #[test]
     fn parse_char_literal() {
@@ -377,16 +377,16 @@ macro_rules! rules {
 
     // rule
     ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] $identifier:ident => { $mapper:expr } $($rest:tt)*) => {
-        rules!([$(($identifiers,$regexes)),*] [crate::Rule::new(crate::Regex::Reference(stringify!($identifier)), $mapper) $(, $rules)*] $($rest)*)
+        $crate::rules!([$(($identifiers,$regexes)),*] [$crate::Rule::new($crate::Regex::Reference(stringify!($identifier)), $mapper) $(, $rules)*] $($rest)*)
     };
 
     ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] { $($regex:tt)+ } => { $mapper:expr } $($rest:tt)*) => {
-        rules!([$(($identifiers,$regexes)),*] [crate::Rule::new(regex!($($regex)+), $mapper) $(, $rules)*] $($rest)*)
+        $crate::rules!([$(($identifiers,$regexes)),*] [$crate::Rule::new($crate::regex!($($regex)+), $mapper) $(, $rules)*] $($rest)*)
     };
 
     // definition
     ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] $identifier:ident = { $($regex:tt)+ } $($rest:tt)*) => {
-        rules!([(stringify!($identifier),regex!($($regex)+)) $(, ($identifiers,$regexes))*] [$($rules),*] $($rest)*)
+        $crate::rules!([(stringify!($identifier),$crate::regex!($($regex)+)) $(, ($identifiers,$regexes))*] [$($rules),*] $($rest)*)
     };
 
     // Finish rules
@@ -396,14 +396,14 @@ macro_rules! rules {
     };
 
     ([] [$($rules:expr),+]) => {
-        crate::Parser {
+        $crate::Parser {
             definitions: std::collections::HashMap::new(),
             rules: [$($rules),+].into_iter().rev().collect()
         }
     };
 
     ([$(($identifiers:expr,$regexes:expr)),+] [$($rules:expr),+]) => {
-        crate::Parser {
+        $crate::Parser {
             definitions: [$(($identifiers,$regexes)),+].into_iter().rev().collect(),
             rules: [$($rules),+].into_iter().rev().collect()
         }
@@ -412,7 +412,7 @@ macro_rules! rules {
     // Start rule
 
     ($($tokens:tt)*) => {
-        rules!([] [] $($tokens)*)
+        $crate::rules!([] [] $($tokens)*)
     };
 }
 
