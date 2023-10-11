@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::io::stdin;
+use std::fs::File;
 use toqenizer::rules;
-use toqenizer::stream::StringCharStream;
+use toqenizer::stream::SeekReadCharStream;
 use toqenizer::nfa::NfaParser;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum Token {
     Word(String),
     Number(String),
@@ -37,24 +37,21 @@ fn main() {
     let mut numbers = HashMap::new();
     let mut punctuations = HashMap::new();
 
-    let mut line = String::new();
+    let mut stream = SeekReadCharStream::new(File::open("hamlet.txt").unwrap());
 
-    while let Ok(_) = stdin().read_line(&mut line) {
-        let mut stream = StringCharStream::new(&line);
-
-        while let Ok(token) = rules.parse(&mut stream) {
-            match token {
-                Token::Spaces => (),
-                Token::Word(word) => {
-                    let _ = words.entry(word).and_modify(|v| *v += 1).or_insert(1);
-                },
-                Token::Number(number) => {
-                    let _ = numbers.entry(number).and_modify(|v| *v += 1).or_insert(1);
-                },
-                Token::Punctuation(punctuation) => {
-                    let _ = punctuations.entry(punctuation).and_modify(|v| *v += 1).or_insert(1);
-                },
-            }
+    while let Ok(token) = rules.parse(&mut stream) {
+        println!("{:?}", token);
+        match token {
+            Token::Spaces => (),
+            Token::Word(word) => {
+                let _ = words.entry(word).and_modify(|v| *v += 1).or_insert(1);
+            },
+            Token::Number(number) => {
+                let _ = numbers.entry(number).and_modify(|v| *v += 1).or_insert(1);
+            },
+            Token::Punctuation(punctuation) => {
+                let _ = punctuations.entry(punctuation).and_modify(|v| *v += 1).or_insert(1);
+            },
         }
     }
 
