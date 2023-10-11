@@ -1,3 +1,4 @@
+use std::io::{Read, Seek, SeekFrom};
 use std::str::CharIndices;
 use read_char::{read_next_char, Error};
 use super::Position;
@@ -147,5 +148,73 @@ mod string_char_stream_should {
         let mut stream = StringCharStream::new("ab");
         
         stream.restore_state();
+    }
+}
+
+pub struct SeekReadCharStream<SeekRead> where SeekRead: Seek + Read {
+    seek_read: SeekRead,
+    next: Result<char, CharStreamError>,
+    position: Position,
+    states: Vec<(Result<char, CharStreamError>, u64)>
+}
+
+impl<SeekRead> SeekReadCharStream<SeekRead> where SeekRead: Seek + Read {
+    pub fn new(seek_read: SeekRead) -> Self {
+        let mut char_stream = SeekReadCharStream {
+            seek_read,
+            next: Ok('\0'),
+            position: Position::new(),
+            states: Vec::new()
+        };
+
+        char_stream.next();
+
+        char_stream
+    }
+}
+
+impl<SeekRead> CharStream for SeekReadCharStream<SeekRead> where SeekRead: Seek + Read {
+    fn peek(&self) -> Result<char, CharStreamError> {
+        self.next
+    }
+
+    fn next(&mut self) {
+        self.next = match read_next_char(&mut self.seek_read) {
+            Ok(next) => {
+                if next == '\n' || next == '\r' {
+                    self.position.inc_line();
+                } else {
+                    self.position.inc_column();
+                }
+
+                Ok(next)
+            },
+            Err(Error::EOF) => Err(CharStreamError::Eof),
+            Err(Error::NotAnUtf8(_)) => Err(CharStreamError::NotUtf8),
+            Err(Error::Io(error)) => Err(CharStreamError::IOError(error.kind())),
+        }
+    }
+
+    fn position(&self) -> Position {
+        self.position
+    }
+
+    fn store_state(&mut self) {
+        self.states.push((self.next, self.seek_read.stream_position().unwrap()))
+    }
+
+    fn restore_state(&mut self) {
+        if let Some((next, offset)) = self.states.pop() {
+            self.next = next;
+            let _ = self.seek_read.seek(SeekFrom::Start(offset));
+        } else {
+            panic!("restore_state: stack is empty")
+        }
+    }
+
+    fn discard_state(&mut self) {
+        if self.states.pop().is_none() {
+            panic!("discard_state: stack is empty")
+        }
     }
 }
