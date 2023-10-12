@@ -4,13 +4,14 @@ Research Rust project to play with declarative macros.
 Generates run-time NFA tokenizer from lex-style rules.
 
 ## Example
+
+```rust
 use std::collections::HashMap;
 use std::fs::File;
 use toqenizer::rules;
 use toqenizer::stream::SeekReadCharStream;
 use toqenizer::nfa::NfaParser;
 
-```rust
 #[derive(PartialEq, Debug)]
 enum Token {
     Word(String),
