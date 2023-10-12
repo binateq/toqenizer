@@ -9,28 +9,28 @@ enum Token {
     Word(String),
     Number(String),
     Punctuation(String),
-    Spaces,
 }
 
 fn main() {
     let rules = rules! {
         spaces = { @is_whitespace* }
         letter = { @is_alphabetic }
-        word = { letter+ ('-' letter+ )* }
+        word = { letter+ ('\'' letter+)? skip(spaces) }
         digit = { @is_ascii_digit }
-        number = { digit+ ('.' digit+)? }
+        number = { digit+ ('.' digit+)? skip(spaces) }
 
         word => { |word| Token::Word(word) }
         number => { |number| Token::Number(number) }
-        { ',' } => { |_| Token::Punctuation(",".to_string()) }
-        { '.' } => { |_| Token::Punctuation(".".to_string()) }
-        { ';' } => { |_| Token::Punctuation(";".to_string()) }
-        { '?'+ } => { |_| Token::Punctuation("?".to_string()) }
-        { '!'+ } => { |_| Token::Punctuation("!".to_string()) }
-        { '-' } => { |_| Token::Punctuation("-".to_string()) }
-        { "..." } => { |_| Token::Punctuation("…".to_string()) }
-        { "---" } => { |_| Token::Punctuation("—".to_string()) }
-        spaces => { |_| Token::Spaces }
+        { '\'' spaces } => { |_| Token::Punctuation("'".to_string()) }
+        { '.' spaces } => { |_| Token::Punctuation(".".to_string()) }
+        { ',' spaces } => { |_| Token::Punctuation(",".to_string()) }
+        { ';' spaces } => { |_| Token::Punctuation(";".to_string()) }
+        { ':' spaces } => { |_| Token::Punctuation(":".to_string()) }
+        { '?'+ spaces } => { |_| Token::Punctuation("?".to_string()) }
+        { '!'+ spaces } => { |_| Token::Punctuation("!".to_string()) }
+        { '-' spaces } => { |_| Token::Punctuation("-".to_string()) }
+        { "..." spaces } => { |_| Token::Punctuation("…".to_string()) }
+        { "---" spaces } => { |_| Token::Punctuation("—".to_string()) }
     };
 
     let mut words = HashMap::new();
@@ -40,9 +40,7 @@ fn main() {
     let mut stream = SeekReadCharStream::new(File::open("hamlet.txt").unwrap());
 
     while let Ok(token) = rules.parse(&mut stream) {
-        println!("{:?}", token);
         match token {
-            Token::Spaces => (),
             Token::Word(word) => {
                 let _ = words.entry(word).and_modify(|v| *v += 1).or_insert(1);
             },
