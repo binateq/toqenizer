@@ -20,46 +20,49 @@ enum Token {
 }
 
 fn main() {
-    // These rules describe words, numbers,
-    // and punctuation symbols in an usual text.
     let rules = rules! {
         spaces = { @is_whitespace* }
         letter = { @is_alphabetic }
-        word = { letter+ ('\'' letter+)? skip(spaces) }
+        word = { letter+ ('\'' letter+)? }
         digit = { @is_ascii_digit }
-        number = { digit+ ('.' digit+)? skip(spaces) }
+        number = { digit+ ('.' digit+)? }
 
-        word => { |word| Token::Word(word) }
-        number => { |number| Token::Number(number) }
-        { '\'' spaces } => { |_| Token::Punctuation("'".to_string()) }
-        { '.' spaces } => { |_| Token::Punctuation(".".to_string()) }
-        { ',' spaces } => { |_| Token::Punctuation(",".to_string()) }
-        { ';' spaces } => { |_| Token::Punctuation(";".to_string()) }
-        { ':' spaces } => { |_| Token::Punctuation(":".to_string()) }
-        { '?'+ spaces } => { |_| Token::Punctuation("?".to_string()) }
-        { '!'+ spaces } => { |_| Token::Punctuation("!".to_string()) }
-        { '-' spaces } => { |_| Token::Punctuation("-".to_string()) }
-        { "..." spaces } => { |_| Token::Punctuation("…".to_string()) }
-        { "---" spaces } => { |_| Token::Punctuation("—".to_string()) }
+        () = { spaces }
+
+        word => { |_, word| Token::Word(word) }
+        number => { |_, number| Token::Number(number) }
+        { '\'' } => { |_, _| Token::Punctuation("'".to_string()) }
+        { '.' } => { |_, _| Token::Punctuation(".".to_string()) }
+        { ',' } => { |_, _| Token::Punctuation(",".to_string()) }
+        { ';' } => { |_, _| Token::Punctuation(";".to_string()) }
+        { ':' } => { |_, _| Token::Punctuation(":".to_string()) }
+        { '?'+ } => { |_, _| Token::Punctuation("?".to_string()) }
+        { '!'+ } => { |_, _| Token::Punctuation("!".to_string()) }
+        { '-' } => { |_, _| Token::Punctuation("-".to_string()) }
+        { "..." } => { |_, _| Token::Punctuation("…".to_string()) }
+        { "---" } => { |_, _| Token::Punctuation("—".to_string()) }
     };
 
     let mut words = HashMap::new();
     let mut numbers = HashMap::new();
     let mut punctuations = HashMap::new();
 
-    let mut stream = SeekReadCharStream::new(File::open("hamlet.txt").unwrap());
+    {
+        let file = File::open("hamlet.txt").unwrap();
+        let mut stream = SeekReadCharStream::new(file);
 
-    while let Ok(token) = rules.parse(&mut stream) {
-        match token {
-            Token::Word(word) => {
-                let _ = words.entry(word).and_modify(|v| *v += 1).or_insert(1);
-            },
-            Token::Number(number) => {
-                let _ = numbers.entry(number).and_modify(|v| *v += 1).or_insert(1);
-            },
-            Token::Punctuation(punctuation) => {
-                let _ = punctuations.entry(punctuation).and_modify(|v| *v += 1).or_insert(1);
-            },
+        while let Ok(token) = rules.parse(&mut stream) {
+            match token {
+                Token::Word(word) => {
+                    let _ = words.entry(word).and_modify(|v| *v += 1).or_insert(1);
+                },
+                Token::Number(number) => {
+                    let _ = numbers.entry(number).and_modify(|v| *v += 1).or_insert(1);
+                },
+                Token::Punctuation(punctuation) => {
+                    let _ = punctuations.entry(punctuation).and_modify(|v| *v += 1).or_insert(1);
+                },
+            }
         }
     }
 
@@ -79,6 +82,39 @@ fn main() {
     }
 }
 ```
+
+## `rules!` macro
+
+The `rules!` macro contains regex definitions and token producing rules.
+
+Definitiona look like
+
+```text
+identifier = { regexp }
+```
+
+where `identifier` is the name of regexp for furhter using. Curly braces are requred. Examples:
+
+```text
+digit = { '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' }
+letter = { @is_acsii_letter }
+identifier = { letter (digit | letter)* }
+```
+
+You can define special regexp `()` that means standard delimiter. If you'll define it, the parser will skip all delimiter from the input.
+
+```text
+() = { @is_whitespace* }
+```
+
+Rules have on of two forms:
+
+```text
+identifier => { Rust expression }
+{ regexp } => { Rust expression }
+```
+
+
 
 ## Regular Expression Syntax
 

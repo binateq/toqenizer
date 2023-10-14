@@ -267,11 +267,11 @@ pub struct ParseError {
 #[derive(Debug, PartialEq)]
 pub struct Rule<'a, Token> {
     regex: Regex<'a>,
-    mapper: fn(String) -> Token
+    mapper: fn(Position, String) -> Token
 }
 
 impl<'a, Token> Rule<'a, Token> {
-    pub fn new(regex: Regex<'a>, mapper: fn(String) -> Token) -> Self {
+    pub fn new(regex: Regex<'a>, mapper: fn(Position, String) -> Token) -> Self {
         Rule {
             regex,
             mapper

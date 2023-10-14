@@ -21,18 +21,18 @@ fn main() {
 
         () = { spaces }
 
-        word => { |word| Token::Word(word) }
-        number => { |number| Token::Number(number) }
-        { '\'' } => { |_| Token::Punctuation("'".to_string()) }
-        { '.' } => { |_| Token::Punctuation(".".to_string()) }
-        { ',' } => { |_| Token::Punctuation(",".to_string()) }
-        { ';' } => { |_| Token::Punctuation(";".to_string()) }
-        { ':' } => { |_| Token::Punctuation(":".to_string()) }
-        { '?'+ } => { |_| Token::Punctuation("?".to_string()) }
-        { '!'+ } => { |_| Token::Punctuation("!".to_string()) }
-        { '-' } => { |_| Token::Punctuation("-".to_string()) }
-        { "..." } => { |_| Token::Punctuation("…".to_string()) }
-        { "---" } => { |_| Token::Punctuation("—".to_string()) }
+        word => { |_, word| Token::Word(word) }
+        number => { |_, number| Token::Number(number) }
+        { '\'' } => { |_, _| Token::Punctuation("'".to_string()) }
+        { '.' } => { |_, _| Token::Punctuation(".".to_string()) }
+        { ',' } => { |_, _| Token::Punctuation(",".to_string()) }
+        { ';' } => { |_, _| Token::Punctuation(";".to_string()) }
+        { ':' } => { |_, _| Token::Punctuation(":".to_string()) }
+        { '?'+ } => { |_, _| Token::Punctuation("?".to_string()) }
+        { '!'+ } => { |_, _| Token::Punctuation("!".to_string()) }
+        { '-' } => { |_, _| Token::Punctuation("-".to_string()) }
+        { "..." } => { |_, _| Token::Punctuation("…".to_string()) }
+        { "---" } => { |_, _| Token::Punctuation("—".to_string()) }
     };
 
     let mut words = HashMap::new();

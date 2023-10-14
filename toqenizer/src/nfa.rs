@@ -15,7 +15,7 @@ impl<'a, Token> NfaParser<'a, Token> for Parser<'a, Token> {
 
         for rule in &self.rules {
             if let Ok(string) = string_parse(&rule.regex, stream, &self.definitions) {
-                return Ok((rule.mapper)(string))
+                return Ok((rule.mapper)(stream.position(), string))
             }
         }
 

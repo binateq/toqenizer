@@ -423,7 +423,7 @@ macro_rules! rules {
 #[cfg(test)]
 mod rules_should {
     use std::collections::HashMap;
-    use super::super::{Parser, Rule, Regex};
+    use super::super::{Parser, Rule, Regex, Position};
 
     #[derive(Debug, PartialEq)]
     enum Token {
@@ -431,11 +431,11 @@ mod rules_should {
         Plus
     }
 
-    fn make_identifier(name: String) -> Token {
+    fn make_identifier(_: Position, name: String) -> Token {
         Token::Identifier(name)
     }
 
-    fn make_plus(_: String) -> Token {
+    fn make_plus(_: Position, _: String) -> Token {
         Token::Plus
     }
 
