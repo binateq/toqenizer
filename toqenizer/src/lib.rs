@@ -253,7 +253,8 @@ pub enum Error {
     UnrecognizedToken,
     UnknownName,
     NotUtf8,
-    IOError(std::io::ErrorKind)
+    IOError(std::io::ErrorKind),
+    StateStackIsEmpty,
 }
 
 #[derive(Debug, PartialEq)]

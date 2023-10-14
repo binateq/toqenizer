@@ -7,7 +7,8 @@ use super::Position;
 pub enum CharStreamError {
     Eof,
     IOError(std::io::ErrorKind),
-    NotUtf8
+    NotUtf8,
+    StateStackIsEmpty
 }
 
 pub trait CharStream {
@@ -17,11 +18,11 @@ pub trait CharStream {
 
     fn position(&self) -> Position;
 
-    fn store_state(&mut self);
+    fn store_state(&mut self) -> Result<(), CharStreamError>;
 
-    fn restore_state(&mut self);
+    fn restore_state(&mut self) -> Result<(), CharStreamError>;
 
-    fn discard_state(&mut self);
+    fn discard_state(&mut self) -> Result<(), CharStreamError>;
 }
 
 pub struct StringCharStream<'a> {
@@ -65,22 +66,28 @@ impl<'a> CharStream for StringCharStream<'a> {
         self.position
     }
 
-    fn store_state(&mut self) {
+    fn store_state(&mut self) -> Result<(), CharStreamError> {
         self.states.push((self.next, self.items.clone()));
+
+        Ok(())
     }
 
-    fn restore_state(&mut self) {
+    fn restore_state(&mut self) -> Result<(), CharStreamError> {
         if let Some((next, items)) = self.states.pop() {
             self.next = next;
             self.items = items;
+
+            Ok(())
         } else {
-            panic!("restore_state: stack is empty")
+            Err(CharStreamError::StateStackIsEmpty)
         }
     }
 
-    fn discard_state(&mut self) {
+    fn discard_state(&mut self) -> Result<(), CharStreamError> {
         if self.states.pop().is_none() {
-            panic!("discard_state: stack is empty")
+            Err(CharStreamError::StateStackIsEmpty)
+        } else {
+            Ok(())
         }
     }
 }
@@ -108,12 +115,12 @@ mod string_char_stream_should {
         assert_eq!(0, stream.states.len());
         assert_eq!(Ok('a'), stream.peek());
 
-        stream.store_state();
+        assert_eq!(Ok(()), stream.store_state());
         stream.next();
         assert_eq!(1, stream.states.len());
         assert_eq!(Ok('b'), stream.peek());
 
-        stream.restore_state();
+        assert_eq!(Ok(()), stream.restore_state());
         assert_eq!(0, stream.states.len());
         assert_eq!(Ok('a'), stream.peek());
     }
@@ -124,30 +131,28 @@ mod string_char_stream_should {
         assert_eq!(0, stream.states.len());
         assert_eq!(Ok('a'), stream.peek());
 
-        stream.store_state();
+        assert_eq!(Ok(()), stream.store_state());
         stream.next();
         assert_eq!(1, stream.states.len());
         assert_eq!(Ok('b'), stream.peek());
 
-        stream.discard_state();
+        assert_eq!(Ok(()), stream.discard_state());
         assert_eq!(0, stream.states.len());
         assert_eq!(Ok('b'), stream.peek());
     }
 
     #[test]
-    #[should_panic]
-    fn panic_when_discard_without_store() {
+    fn error_when_discard_without_store() {
         let mut stream = StringCharStream::new("ab");
         
-        stream.discard_state();
+        assert_eq!(Err(CharStreamError::StateStackIsEmpty), stream.restore_state());
     }
 
     #[test]
-    #[should_panic]
-    fn panic_when_restore_without_store() {
+    fn error_when_restore_without_store() {
         let mut stream = StringCharStream::new("ab");
         
-        stream.restore_state();
+        assert_eq!(Err(CharStreamError::StateStackIsEmpty), stream.restore_state());
     }
 }
 
@@ -199,22 +204,36 @@ impl<SeekRead> CharStream for SeekReadCharStream<SeekRead> where SeekRead: Seek 
         self.position
     }
 
-    fn store_state(&mut self) {
-        self.states.push((self.next, self.seek_read.stream_position().unwrap()))
-    }
+    fn store_state(&mut self) -> Result<(), CharStreamError> {
+        match self.seek_read.stream_position() {
+            Ok(position) => {
+                self.states.push((self.next, position));
 
-    fn restore_state(&mut self) {
-        if let Some((next, offset)) = self.states.pop() {
-            self.next = next;
-            let _ = self.seek_read.seek(SeekFrom::Start(offset));
-        } else {
-            panic!("restore_state: stack is empty")
+                Ok(())
+            },
+            Err(error) => Err(CharStreamError::IOError(error.kind()))
         }
     }
 
-    fn discard_state(&mut self) {
+    fn restore_state(&mut self) -> Result<(), CharStreamError> {
+        if let Some((next, offset)) = self.states.pop() {
+            if let Err(error) = self.seek_read.seek(SeekFrom::Start(offset)) {
+                Err(CharStreamError::IOError(error.kind()))
+            } else {
+                self.next = next;
+
+                Ok(())
+            }
+        } else {
+            Err(CharStreamError::StateStackIsEmpty)
+        }
+    }
+
+    fn discard_state(&mut self) -> Result<(), CharStreamError> {
         if self.states.pop().is_none() {
-            panic!("discard_state: stack is empty")
+            Err(CharStreamError::StateStackIsEmpty)
+        } else {
+            Ok(())
         }
     }
 }

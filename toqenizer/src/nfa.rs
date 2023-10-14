@@ -34,11 +34,12 @@ impl<'a> ParserState<'a> {
         })
     }
 
-    fn char_stream_error(&self, char_stream_error: &CharStreamError) -> Result<(), ParseError> {
+    fn char_stream_error(&self, char_stream_error: CharStreamError) -> Result<(), ParseError> {
         match char_stream_error {
             CharStreamError::Eof => self.error(Error::UnexpectedEof),
-            CharStreamError::IOError(io_error) => self.error(Error::IOError(*io_error)),
+            CharStreamError::IOError(io_error) => self.error(Error::IOError(io_error)),
             CharStreamError::NotUtf8 => self.error(Error::NotUtf8),
+            CharStreamError::StateStackIsEmpty => self.error(Error::StateStackIsEmpty),
         }
     }
 
@@ -68,7 +69,7 @@ impl<'a> ParserState<'a> {
                     self.error(Error::ExpectChar)
                 }
             },
-            Err(error) => self.char_stream_error(&error),
+            Err(error) => self.char_stream_error(error),
         }
     }
 
@@ -84,13 +85,13 @@ impl<'a> ParserState<'a> {
                     self.error(Error::ExpectChar)
                 }
             },
-            Err(error) => self.char_stream_error(&error),
+            Err(error) => self.char_stream_error(error),
         }
     }
 
     fn parse_string(&mut self, string: &str) -> Result<(), ParseError> {
         let buffer_length = self.buffer.len();
-        self.stream.store_state();
+        self.stream.store_state().or_else(|e| self.char_stream_error(e))?;
     
         for c in string.chars() {
             match self.stream.peek() {
@@ -100,21 +101,21 @@ impl<'a> ParserState<'a> {
                         self.stream.next();
                     } else {
                         self.buffer.truncate(buffer_length);
-                        self.stream.restore_state();
+                        self.stream.restore_state().or_else(|e| self.char_stream_error(e))?;
                         
                         return self.error(Error::ExpectChar);
                     }
                     },
                 Err(error) => {
                     self.buffer.truncate(buffer_length);
-                    self.stream.restore_state();
+                    self.stream.restore_state().or_else(|e| self.char_stream_error(e))?;
                     
-                    return self.char_stream_error(&error);
+                    return self.char_stream_error(error);
                 },
             }
         }
     
-        self.stream.discard_state();
+        self.stream.discard_state().or_else(|e| self.char_stream_error(e))?;
         Ok(())
     }
 
@@ -124,12 +125,12 @@ impl<'a> ParserState<'a> {
         }
         
         let buffer_length = self.buffer.len();
-        self.stream.store_state();
+        self.stream.store_state().or_else(|e| self.char_stream_error(e))?;
     
         for _ in 0..range.start {
             if let Err(parse_error) = self.parse(&regex, dictionary) {
                 self.buffer.truncate(buffer_length);
-                self.stream.restore_state();
+                self.stream.restore_state().or_else(|e| self.char_stream_error(e))?;
     
                 return Err(parse_error);
             }
@@ -141,13 +142,13 @@ impl<'a> ParserState<'a> {
             }
         }
     
-        self.stream.discard_state();
+        self.stream.discard_state().or_else(|e| self.char_stream_error(e))?;
         Ok(())
     }
 
     fn parse_and(&mut self, regex1: &Regex, regex2: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let buffer_length = self.buffer.len();
-        self.stream.store_state();
+        self.stream.store_state().or_else(|e| self.char_stream_error(e))?;
     
         if let Err(error) = self.parse(regex1, dictionary) {
             return Err(error);
@@ -155,29 +156,29 @@ impl<'a> ParserState<'a> {
     
         if let Err(error) = self.parse(regex2, dictionary) {
             self.buffer.truncate(buffer_length);
-            self.stream.restore_state();
+            self.stream.restore_state().or_else(|e| self.char_stream_error(e))?;
     
             return Err(error);
         }
     
-        self.stream.discard_state();
+        self.stream.discard_state().or_else(|e| self.char_stream_error(e))?;
         Ok(())
     }
 
     fn parse_or(&mut self, regex1: &Regex, regex2: &Regex, dictionary: &HashMap<&str, Regex>) -> Result<(), ParseError> {
         let buffer_length = self.buffer.len();
-        self.stream.store_state();
+        self.stream.store_state().or_else(|e| self.char_stream_error(e))?;
     
         if let Err(_) = self.parse(regex1, dictionary) {
             if let Err(parse_error) = self.parse(regex2, dictionary) {
                 self.buffer.truncate(buffer_length);
-                self.stream.restore_state();
+                self.stream.restore_state().or_else(|e| self.char_stream_error(e))?;
         
                 return Err(parse_error);
             }
         }
     
-        self.stream.discard_state();
+        self.stream.discard_state().or_else(|e| self.char_stream_error(e))?;
         Ok(())
     }
 
@@ -186,7 +187,7 @@ impl<'a> ParserState<'a> {
             Ok(_) => self.error(Error::ExpectEof),
             Err(error) => match error {
                 CharStreamError::Eof => Ok(()),
-                error => self.char_stream_error(&error)
+                error => self.char_stream_error(error)
             }
         }
     }
