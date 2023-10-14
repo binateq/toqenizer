@@ -9,6 +9,10 @@ pub trait NfaParser<'a, Token> {
 
 impl<'a, Token> NfaParser<'a, Token> for Parser<'a, Token> {
     fn parse(&self, stream: &mut dyn CharStream) -> Result<Token, ParseError> {
+        if let Some(delimiter) = self.definitions.get("()") {
+            let _ = string_parse(delimiter, stream, &self.definitions)?;
+        }
+
         for rule in &self.rules {
             if let Ok(string) = string_parse(&rule.regex, stream, &self.definitions) {
                 return Ok((rule.mapper)(string))

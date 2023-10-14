@@ -389,6 +389,10 @@ macro_rules! rules {
         $crate::rules!([(stringify!($identifier),$crate::regex!($($regex)+)) $(, ($identifiers,$regexes))*] [$($rules),*] $($rest)*)
     };
 
+    ([$(($identifiers:expr,$regexes:expr)),*] [$($rules:expr),*] () = { $($regex:tt)+ } $($rest:tt)*) => {
+        $crate::rules!([("()",$crate::regex!($($regex)+)) $(, ($identifiers,$regexes))*] [$($rules),*] $($rest)*)
+    };
+
     // Finish rules
 
     ([$(($identifiers:expr,$regexex:expr)),*] []) => {
