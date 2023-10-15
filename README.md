@@ -101,20 +101,38 @@ letter = { @is_acsii_letter }
 identifier = { letter (digit | letter)* }
 ```
 
-You can define special regexp `()` that means standard delimiter. If you'll define it, the parser will skip all delimiter from the input.
+You can define special regexp `()` that means standard delimiter. If you'll define it, the parser will skip such delimiters from the input.
 
 ```text
 () = { @is_whitespace* }
 ```
 
-Rules have on of two forms:
+Rules have one of two forms:
 
 ```text
 identifier => { Rust expression }
 { regexp } => { Rust expression }
 ```
 
+Rust expression usually is a closure that gets two parameters — position and text — and produces token value.
 
+Token value is yourown defined enum.
+
+```rust
+enum Token {
+    Word(String),
+    Number(u64),
+    Punctuation(String),
+}
+```
+
+So rules usually look like:
+
+```text
+{ letter+ } => { |_, word| Token::Word(word) }
+{ digit+ } => { |_, number| Token::Number(parse::<u64>(&number).unwrap()) }
+{ '.' } => { |_, _| Token::Punctuation(".") }
+```
 
 ## Regular Expression Syntax
 
@@ -145,6 +163,12 @@ let mut stream = StringCharStream::new("abcd");
 assert_eq!(Ok("abc".to_string()), string_parse(&regex, &mut stream, HashMap::new()));
 assert_eq!(Ok('d'), stream.peek());
 ```
+
+### Sequences
+
+The sequence of regexps matches with correspondign characters of the input stream.
+
+For example the regexp `'a' "bcd" 'e' "f"` matches with characters 'a', 'b', 'c', 'd', 'e', and 'f'.
 
 ### Character predicates
 
@@ -182,29 +206,57 @@ The `eof` regex matches with the end of input stream.
 
 The **toqenizer** has four operators of repetition: `?`, `*`, `+`, and `{min, max}`.
 
-* The `?` makes previous regex an optional.
-* The `*` matches with 0 or more repetitions of previous regex.
-* The `*` matches with 1 or more repetitions of previous regex.
-* The `{min,max}` matches with `min..max` repetitions of previous regex. 
+The `?` makes previous regex an optional. The `*` matches with 0 or more repetitions of previous regex.
+
+```text
+list = { number (',' number)* ','? }
+```
+
+The regexp matches with a list of numbers, sepearated by commas with optinal final comma. 
+
+The `*` matches with 1 or more repetitions of previous regex. The `{min,max}` matches with `min..max` repetitions of previous regex.
+
+### Case Insensitivetly
+
+Usually matching is case sensitive. i.e. regex `'a'` matches with the 'a' character, but not with the 'A'.
+
+The `ci('a')` regexp matches with both 'a' and 'A' characters, and `ci("AbCd")` matches with "abcd", "ABCd", "ABCD", and so on.
+
+### String Buffer
+
+Usually the **toqenizer** stores any matching character in a string buffer, but sometimes we need only part of input stream to processing.
+
+F.e. we need parse hexadecimal numbers like "0x2bad", but we don't need "0x" characters to convert "2bad" to the binary format.
+
+To skip some characters we can use the `skip()` function.
+
+```text
+hex_digit = { @{ |c| c.is_digit(16) } }
+hex_number = skip("0x") hex_digit+
+```
+
+### Replacements
+
+
 
 ## BNF
 
 ```
 analyzer_description = { statement }
 
-statement = ( assignment | rule )
+statement = ( definition | rule )
 
-assignment = identifier "=" "{" regexp "}"
+definition = identifier "=" "{" regexp "}"
 
-rule = identifier "=>" "{" fn(String) -> Token "}"
-     | "{" regexp "}" "=>" "{" fn(String) -> Token "}"
+rule = identifier "=>" "{" fn(Position, String) -> Token "}"
+     | "{" regexp "}" "=>" "{" fn(Position, String) -> Token "}"
 
 regexp = terminal { regexp }
        | terminal "|" regexp
        | terminal "?"
        | terminal "*"
        | terminal "+"
-       | terminal "{" unsigned "," unsigned "}"
+       | terminal "{" u32 "," u32 "}"
        | terminal "=>" string
        | terminal "=>" "{" fn(String) -> String "}"
 
