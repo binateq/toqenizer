@@ -237,7 +237,45 @@ hex_number = skip("0x") hex_digit+
 
 ### Replacements
 
+Usually any recognized character is written to the string buffer for subsequent processing. But sometimes we need replace characters in the buffer.
 
+F.e. when we try to recognize C-string, we get characers '\' and 'n', and the put newline charactern '\n';
+
+We can make it with the replace operator `=>`:
+
+```text
+c_string = {
+    skip('"')
+    ( @{ |c| c != '\\' && c != '"' }
+    | "\\n" => "\n"
+    | "\\r" => "\r"
+    | "\\t" => "\t" )
+    skip('"')
+} 
+```
+
+Another example is recognizing sequences like '\x40'. Here we should convert "40" to integer, and then convert the integer to character. We can do it with a help of the replace operator `=> { }`:
+
+```text
+    | skip("\\x") @{ |c| c.is_digit(16) }{2, 2} => { |s| char::from_u32(s.parse::<u32>().unwrap()).unwrap() }
+```
+
+### Parentheses
+
+You can use parentheses '(' and ')' in regular expressions:
+
+```text
+identifier = letter (letter | digit)*;
+```
+
+### References
+
+You can reference to another regexp definitions:
+
+```text
+digit = { @is_ascee_digit }
+digits = digit+
+```
 
 ## BNF
 
