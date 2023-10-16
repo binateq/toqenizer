@@ -15,7 +15,7 @@ use toqenizer::nfa::NfaParser;
 #[derive(PartialEq, Debug)]
 enum Token {
     Word(String),
-    Number(String),
+    Number(u64),
     Punctuation(String),
 }
 
@@ -30,7 +30,7 @@ fn main() {
         () = { spaces }
 
         word => { |_, word| Token::Word(word) }
-        number => { |_, number| Token::Number(number) }
+        number => { |_, number| Token::Number(number.parse::<u64>().unwrap()) }
         { '\'' } => { |_, _| Token::Punctuation("'".to_string()) }
         { '.' } => { |_, _| Token::Punctuation(".".to_string()) }
         { ',' } => { |_, _| Token::Punctuation(",".to_string()) }
@@ -87,7 +87,7 @@ fn main() {
 
 The `rules!` macro contains regex definitions and token producing rules.
 
-Definitiona look like
+Definitions look like
 
 ```text
 identifier = { regexp }
@@ -130,7 +130,7 @@ So rules usually look like:
 
 ```text
 { letter+ } => { |_, word| Token::Word(word) }
-{ digit+ } => { |_, number| Token::Number(parse::<u64>(&number).unwrap()) }
+{ digit+ } => { |_, number| Token::Number(number.parse::<u64>().unwrap()) }
 { '.' } => { |_, _| Token::Punctuation(".") }
 ```
 
