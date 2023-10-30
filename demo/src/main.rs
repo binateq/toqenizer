@@ -1,32 +1,32 @@
 use std::collections::HashMap;
 use std::fs::File;
-use toqenizer::rules;
+use toqenizer::parser;
 use toqenizer::stream::SeekReadCharStream;
 use toqenizer::nfa::NfaParser;
 
 #[derive(PartialEq, Debug)]
 enum Token {
     Word(String),
-    Number(String),
+    Number(i32),
     Punctuation(String),
 }
 
 fn main() {
-    let rules = rules! {
+    let parser = parser! {
         spaces = { @is_whitespace* }
         letter = { @is_alphabetic }
         word = { letter+ ('\'' letter+)? }
         digit = { @is_ascii_digit }
-        number = { digit+ ('.' digit+)? }
+        number = { digit+ }
 
         () = { spaces }
 
         word => { |_, word| Token::Word(word) }
-        number => { |_, number| Token::Number(number) }
-        { '\'' } => { |_, _| Token::Punctuation("'".to_string()) }
-        { '.' } => { |_, _| Token::Punctuation(".".to_string()) }
-        { ',' } => { |_, _| Token::Punctuation(",".to_string()) }
-        { ';' } => { |_, _| Token::Punctuation(";".to_string()) }
+        number => { |_, number| Token::Number(number.parse::<i32>().unwrap()) }
+        { '\'' } => Token::Punctuation("'".to_string());
+        { '.' } => Token::Punctuation(".".to_string());
+        ',' => { |_, _| Token::Punctuation(",".to_string()) }
+        ';' => Token::Punctuation(";".to_string());
         { ':' } => { |_, _| Token::Punctuation(":".to_string()) }
         { '?'+ } => { |_, _| Token::Punctuation("?".to_string()) }
         { '!'+ } => { |_, _| Token::Punctuation("!".to_string()) }
@@ -43,7 +43,7 @@ fn main() {
         let file = File::open("hamlet.txt").unwrap();
         let mut stream = SeekReadCharStream::new(file);
 
-        while let Ok(token) = rules.parse(&mut stream) {
+        while let Ok(token) = parser.parse(&mut stream) {
             match token {
                 Token::Word(word) => {
                     let _ = words.entry(word).and_modify(|v| *v += 1).or_insert(1);
